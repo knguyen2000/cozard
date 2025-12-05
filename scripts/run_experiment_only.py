@@ -56,8 +56,22 @@ def install_dependencies(slice):
         logger.info(f"\n[{node_name}] Uploading install script...")
         node = slice.get_node(node_name)
         
-        # Upload install script
-        node.upload_file(str(script_path), 'install_dependencies.sh')
+        # Retry logic for upload (SSH might not be ready)
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                # Upload install script
+                node.upload_file(str(script_path), 'install_dependencies.sh')
+                break  # Success
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"[{node_name}] Upload failed (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    logger.error(f"[{node_name}] Upload failed after {max_retries} attempts")
+                    raise
         
         # Execute installation
         logger.info(f"[{node_name}] Running installation...")
