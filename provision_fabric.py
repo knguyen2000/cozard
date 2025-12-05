@@ -42,19 +42,19 @@ def provision_slice(slice_name="cloud_gaming_experiment", experiment_type="gamin
     DISK = 10  # Max allowed without VM.NoLimitDisk tag
     IMAGE = 'default_ubuntu_20'
     
-    # GPU configuration - RTX6000 more commonly available than Tesla T4
-    GPU_MODEL = 'GPU_RTX6000'  # Change to GPU_TeslaT4 if RTX6000 doesn't work
-    GPU_NAME = 'RTX6000'
+    # GPU configuration - Tesla T4 (your project has permission for this)
+    GPU_MODEL = 'GPU_TeslaT4'
+    GPU_NAME = 'Tesla T4'
     
     # Try multiple sites
-    GPU_SITES = ['TACC', 'NCSA', 'MAX', 'SALT', 'MICH', 'UTAH']
+    GPU_SITES = ['UTAH', 'MAX', 'MICH', 'TACC', 'GATECH', 'RENC']
     
     print(f"Checking GPU availability across sites...")
     print(f"Looking for: {GPU_NAME}")
     print("(If this fails, GPUs may all be reserved - try again later)\n")
     
-    # Simple heuristic: Try TACC first (historically good GPU availability)
-    SITE = 'TACC'
+    # Try different sites - Tesla T4 availability varies
+    SITE = 'UTAH'  # Trying UTAH first
     
     print(f"Using site: {SITE} with {GPU_NAME} GPUs")
     print("Note: Will attempt provisioning. If it fails, try:")
