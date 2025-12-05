@@ -72,10 +72,14 @@ class WebRTCClient:
             else:
                 raise
         
+        
         self.webrtc = self.pipe.get_by_name('sendrecv')
+        if not self.webrtc:
+            raise RuntimeError("Failed to get webrtcbin element 'sendrecv' from pipeline")
+        
         self.webrtc.connect('on-negotiation-needed', self.on_negotiation_needed)
         self.webrtc.connect('on-ice-candidate', self.send_ice)
-        self.webrtc.connect('on-ice-gathering-state-notify', self.on_ice_gathering_state)
+        # Note: 'on-ice-gathering-state-notify' removed (not in GStreamer 1.16.3)
         
         # Bus for error handling
         bus = self.pipe.get_bus()

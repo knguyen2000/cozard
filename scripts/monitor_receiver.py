@@ -175,6 +175,9 @@ class WebRTCReceiver:
         self.pipe = Gst.parse_launch(PIPELINE_DESC)
         self.webrtc = self.pipe.get_by_name('sendrecv')
         
+        if not self.webrtc:
+            raise RuntimeError("Failed to get webrtcbin element 'sendrecv' from pipeline")
+        
         self.webrtc.connect('pad-added', self.on_incoming_stream)
         self.webrtc.connect('on-ice-candidate', self.send_ice)
         
