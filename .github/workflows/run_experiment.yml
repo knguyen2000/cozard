@@ -1,7 +1,10 @@
 name: Run Experiment on Existing Slice
 
 on:
-  workflow_dispatch: # Manual trigger only
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Manual
 
 jobs:
   run-experiment:

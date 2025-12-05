@@ -114,34 +114,27 @@ def download_test_video(slice):
     
     logger.info("Downloading BigBuckBunny.mp4...")
     
-    # Try wget with output
-    cmd = "wget -O game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
+    # Try wget
+    cmd = "wget -O game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 2>&1"
     result = node.execute(cmd)
     
-    logger.info(f"wget exit code: {result[0]}")
-    if result[1]:  # stdout
-        logger.info(f"wget output: {result[1][:200]}")
-    if result[2]:  # stderr
-        logger.info(f"wget stderr: {result[2][:200]}")
+    # Verify download by checking if file exists
+    verify_result = node.execute("ls -lh game_clip.mp4 2>/dev/null")
     
-    if result[0] == 0:
-        # Verify download
-        size_result = node.execute("ls -lh game_clip.mp4 2>&1")
-        logger.info(f"✓ Video downloaded: {size_result[1].strip()}")
+    if verify_result[0] == 0:
+        size_info = verify_result[1].strip() if len(verify_result) > 1 else "unknown size"
+        logger.info(f"✓ Video downloaded successfully: {size_info}")
     else:
         # Try alternative: curl
-        logger.warning("wget failed, trying curl...")
+        logger.warning("wget may have failed, trying curl...")
         curl_cmd = "curl -o game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
         curl_result = node.execute(curl_cmd)
         
-        if curl_result[0] == 0:
+        # Verify again
+        verify_curl = node.execute("ls -lh game_clip.mp4 2>/dev/null")
+        if verify_curl[0] == 0:
             logger.info("✓ Video downloaded using curl")
         else:
-            logger.error(f"Both wget and curl failed")
-            logger.error(f"wget output: {result[1]}")
-            logger.error(f"wget error: {result[2]}")
-            logger.error(f"curl output: {curl_result[1]}")
-            logger.error(f"curl error: {curl_result[2]}")
             raise RuntimeError("Failed to download test video with both wget and curl")
 
 def run_experiment(slice):
