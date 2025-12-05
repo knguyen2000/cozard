@@ -1,13 +1,13 @@
-name: Run Experiment on FABRIC
+name: Run Experiment on Existing Slice
 
 on:
-  # push:
-  #   branches: [main]
-  workflow_dispatch:
+  workflow_dispatch: # Manual trigger only
 
 jobs:
-  experiment:
+  run-experiment:
     runs-on: ubuntu-latest
+    timeout-minutes: 30 # Faster since no provisioning
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,7 +17,7 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Dependencies
+      - name: Install FABRIC Client
         run: |
           python -m pip install --upgrade pip
           pip install fabrictestbed-extensions pandas pyjwt
@@ -36,7 +36,7 @@ jobs:
           python -c "import os; open(os.path.expanduser('~/.fabric/slice_key.pub'), 'w').write(os.environ['FABRIC_SLICE_PUB_KEY'])"
           chmod 600 ~/.fabric/bastion_key ~/.fabric/slice_key
 
-      - name: Create fabric_rc
+      - name: Create FABRIC Configuration
         run: |
           cat <<EOF > fabric_rc
           [DEFAULT]
@@ -51,20 +51,88 @@ jobs:
           FABRIC_SLICE_PUBLIC_KEY_FILE=/home/runner/.fabric/slice_key.pub
           EOF
 
-      - name: Deploy and Run Experiment
+      - name: Run Experiment (No Provisioning)
         env:
           FABRIC_LOG_LEVEL: INFO
           FABRIC_RC_FILE: ${{ github.workspace }}/fabric_rc
         run: |
-          python scripts/run_gaming_experiment.py
+          echo "Running experiment on existing slice..."
+          echo "This assumes slice 'cloud_gaming_experiment' already exists"
+          python scripts/run_experiment_only.py
+
+      - name: Generate Performance Graphs
+        if: always()
+        run: |
+          pip install matplotlib pandas
+
+          cat <<'PYEOF' > analyze_results.py
+          import pandas as pd
+          import matplotlib.pyplot as plt
+
+          try:
+              df = pd.read_csv('baseline.csv')
+              
+              fig, axes = plt.subplots(3, 1, figsize=(12, 10))
+              
+              # FPS over time
+              axes[0].plot(df['elapsed_sec'], df['fps'], color='blue', linewidth=1)
+              axes[0].set_xlabel('Time (seconds)')
+              axes[0].set_ylabel('FPS')
+              axes[0].set_title('Video Frame Rate Over Time')
+              axes[0].grid(True, alpha=0.3)
+              axes[0].axhline(y=30, color='green', linestyle='--', label='Target 30 FPS')
+              axes[0].legend()
+              
+              # Stall events
+              stalls = df[df['is_stall'] == 1]
+              axes[1].scatter(stalls['elapsed_sec'], stalls['delta_ms'],
+                            color='red', alpha=0.6, s=50)
+              axes[1].set_xlabel('Time (seconds)')
+              axes[1].set_ylabel('Stall Duration (ms)')
+              axes[1].set_title('Stall Events (>100ms frame gaps)')
+              axes[1].grid(True, alpha=0.3)
+              axes[1].axhline(y=100, color='orange', linestyle='--', label='Stall Threshold')
+              axes[1].legend()
+              
+              # Bitrate
+              axes[2].plot(df['elapsed_sec'], df['bitrate_kbps'], color='purple', linewidth=1)
+              axes[2].set_xlabel('Time (seconds)')
+              axes[2].set_ylabel('Bitrate (kbps)')
+              axes[2].set_title('Video Stream Bitrate')
+              axes[2].grid(True, alpha=0.3)
+              
+              plt.tight_layout()
+              plt.savefig('gaming_performance.png', dpi=150, bbox_inches='tight')
+              print("✓ Generated gaming_performance.png")
+              
+          except Exception as e:
+              print(f"Error generating graphs: {e}")
+          PYEOF
+
+          python analyze_results.py
 
       - name: Upload Experiment Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: experiment-results
+          name: experiment-results-${{ github.run_number }}
           path: |
+            baseline.csv
+            gaming_performance.png
             *.log
-            *.csv
-            *.png
-            *.json
+          retention-days: 30
+
+      - name: Create Summary
+        if: always()
+        run: |
+          echo "## Experiment Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Slice**: Reused existing infrastructure" >> $GITHUB_STEP_SUMMARY
+          echo "**Runtime**: ~1-2 minutes (no provisioning)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f baseline.csv ]; then
+            echo "✓ Results collected successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No results file found" >> $GITHUB_STEP_SUMMARY
+          fi

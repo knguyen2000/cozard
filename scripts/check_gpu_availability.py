@@ -50,7 +50,7 @@ def check_gpu_availability():
         print(f"\n✓ Found GPUs at: {', '.join(available_sites)}")
         print(f"\nRecommended: Use {available_sites[0]} for your experiment")
     else:
-        print("\n⚠️  No Tesla T4 GPUs currently available")
+        print("\n No Tesla T4 GPUs currently available")
         print("Try again later or check FABRIC status page")
     
     print("\nNote: Availability changes frequently as other users reserve/release resources")
