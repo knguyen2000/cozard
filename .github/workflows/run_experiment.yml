@@ -1,0 +1,70 @@
+name: Run Experiment on FABRIC
+
+on:
+  # push:
+  #   branches: [main]
+  workflow_dispatch:
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install fabrictestbed-extensions pandas pyjwt
+
+      - name: Configure FABRIC Credentials
+        env:
+          FABRIC_TOKEN_JSON: ${{ secrets.FABRIC_TOKEN_JSON }}
+          FABRIC_BASTION_KEY: ${{ secrets.FABRIC_BASTION_KEY }}
+          FABRIC_SLICE_KEY: ${{ secrets.FABRIC_SLICE_KEY }}
+          FABRIC_SLICE_PUB_KEY: ${{ secrets.FABRIC_SLICE_PUB_KEY }}
+        run: |
+          mkdir -p ~/.fabric
+          python -c "import os; open(os.path.expanduser('~/.fabric/id_token.json'), 'w').write(os.environ['FABRIC_TOKEN_JSON'])"
+          python -c "import os; open(os.path.expanduser('~/.fabric/bastion_key'), 'w').write(os.environ['FABRIC_BASTION_KEY'])"
+          python -c "import os; open(os.path.expanduser('~/.fabric/slice_key'), 'w').write(os.environ['FABRIC_SLICE_KEY'])"
+          python -c "import os; open(os.path.expanduser('~/.fabric/slice_key.pub'), 'w').write(os.environ['FABRIC_SLICE_PUB_KEY'])"
+          chmod 600 ~/.fabric/bastion_key ~/.fabric/slice_key
+
+      - name: Create fabric_rc
+        run: |
+          cat <<EOF > fabric_rc
+          [DEFAULT]
+          FABRIC_CREDMGR_HOST=cm.fabric-testbed.net
+          FABRIC_ORCHESTRATOR_HOST=orchestrator.fabric-testbed.net
+          FABRIC_PROJECT_ID=${{ secrets.FABRIC_PROJECT_ID }}
+          FABRIC_TOKEN_LOCATION=/home/runner/.fabric/id_token.json
+          FABRIC_BASTION_HOST=bastion.fabric-testbed.net
+          FABRIC_BASTION_USERNAME=${{ secrets.FABRIC_BASTION_USERNAME }}
+          FABRIC_BASTION_KEY_LOCATION=/home/runner/.fabric/bastion_key
+          FABRIC_SLICE_PRIVATE_KEY_FILE=/home/runner/.fabric/slice_key
+          FABRIC_SLICE_PUBLIC_KEY_FILE=/home/runner/.fabric/slice_key.pub
+          EOF
+
+      - name: Deploy and Run Experiment
+        env:
+          FABRIC_LOG_LEVEL: INFO
+          FABRIC_RC_FILE: ${{ github.workspace }}/fabric_rc
+        run: |
+          python scripts/deploy_and_run.py
+
+      - name: Upload Experiment Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: experiment-results
+          path: |
+            *.log
+            *.csv
+            *.png
+            *.json
