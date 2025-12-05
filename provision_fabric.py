@@ -41,7 +41,36 @@ def provision_slice(slice_name="cloud_gaming_experiment", experiment_type="gamin
     RAM = 10
     DISK = 10  # Max allowed without VM.NoLimitDisk tag
     IMAGE = 'default_ubuntu_20'
-    SITE = 'SALT'  # Force all nodes to same site (L2 networks limited to 2 sites)
+    
+    # Try multiple sites for GPU availability
+    GPU_SITES = ['NCSA', 'TACC', 'SALT', 'MAX', 'MICH', 'UTAH']  # Sites likely to have GPUs
+    
+    print(f"Checking GPU availability across sites...")
+    
+    # Find a site with available Tesla T4 GPUs
+    SITE = None
+    for potential_site in GPU_SITES:
+        try:
+            print(f"  Checking {potential_site}...")
+            # Get site advertisement
+            available = fablib.get_resources()
+            site_info = available.get(potential_site, {})
+            
+            # Check for GPU availability
+            if 'GPU_TeslaT4' in str(site_info):
+                SITE = potential_site
+                print(f"✓ Found GPUs at {SITE}")
+                break
+        except Exception as e:
+            print(f"  {potential_site}: Unable to check ({e})")
+            continue
+    
+    if SITE is None:
+        print("No Tesla T4 GPUs available at any site")
+        print("Trying NCSA as fallback...")
+        SITE = 'NCSA'  # Best chance for GPUs
+    
+    print(f"\nUsing site: {SITE}")
 
     if experiment_type == "gaming":
         # Cloud Gaming Kill-Switch Experiment (4 nodes)
