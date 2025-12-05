@@ -108,9 +108,15 @@ def download_test_video(slice):
     
     # Check file size (more reliable than existence checks)
     # BigBuckBunny.mp4 is ~150MB, so anything >100MB is valid
+    # Note: FABRIC sometimes returns file size in exit_code field!
     size_check = node.execute("stat -c%s game_clip.mp4 2>/dev/null || echo 0")
     try:
-        file_size = int(size_check[1].strip()) if size_check[0] == 0 else 0
+        file_size = 0
+        if len(size_check) > 1 and size_check[1].strip():
+            file_size = int(size_check[1].strip())
+        elif size_check[0] > 100000000:
+            file_size = size_check[0]  # FABRIC bug workaround
+        
         if file_size > 100000000:  # >100MB
             logger.info(f"✓ Test video already exists ({file_size / 1024 / 1024:.1f} MB), skipping download")
             return
@@ -128,22 +134,27 @@ def download_test_video(slice):
     time.sleep(3)
     
     # Verify by checking file size
+    # Note: FABRIC sometimes returns file size in exit_code field instead of output!
     verify_size = node.execute("stat -c%s game_clip.mp4 2>/dev/null || echo 0")
     logger.info(f"Verification check: exit_code={verify_size[0]}, output='{verify_size[1] if len(verify_size) > 1 else 'NO OUTPUT'}'")
     
     try:
-        if verify_size[0] == 0 and len(verify_size) > 1:
+        # Try to parse size from output first
+        downloaded_size = 0
+        if len(verify_size) > 1 and verify_size[1].strip():
             size_str = verify_size[1].strip()
-            logger.info(f"Size string after strip: '{size_str}'")
+            logger.info(f"Size string from output: '{size_str}'")
             downloaded_size = int(size_str)
-            logger.info(f"Parsed size: {downloaded_size} bytes ({downloaded_size / 1024 / 1024:.1f} MB)")
-            if downloaded_size > 100000000:  # >100MB means success
-                logger.info(f"✓ Video downloaded successfully ({downloaded_size / 1024 / 1024:.1f} MB)")
-                return
-            else:
-                logger.warning(f"File size ({downloaded_size} bytes) is less than 100MB threshold")
+        elif verify_size[0] > 100000000:
+            # FABRIC bug: sometimes file size ends up in exit code field!
+            downloaded_size = verify_size[0]
+            logger.info(f"Size found in exit_code field: {downloaded_size}")
+        
+        if downloaded_size > 100000000:  # >100MB means success
+            logger.info(f"✓ Video downloaded successfully ({downloaded_size / 1024 / 1024:.1f} MB)")
+            return
         else:
-            logger.warning(f"Stat command failed or returned no output")
+            logger.warning(f"File size ({downloaded_size} bytes) is less than 100MB threshold")
     except Exception as e:
         logger.error(f"Error parsing file size: {e}")
         logger.error(f"Raw verify_size: {verify_size}")
@@ -158,7 +169,12 @@ def download_test_video(slice):
     time.sleep(3)
     final_size = node.execute("stat -c%s game_clip.mp4 2>/dev/null || echo 0")
     try:
-        final_bytes = int(final_size[1].strip()) if final_size[0] == 0 else 0
+        final_bytes = 0
+        if len(final_size) > 1 and final_size[1].strip():
+            final_bytes = int(final_size[1].strip())
+        elif final_size[0] > 100000000:
+            final_bytes = final_size[0]  # FABRIC bug workaround
+        
         if final_bytes > 100000000:
             logger.info(f"✓ Video downloaded with curl ({final_bytes / 1024 / 1024:.1f} MB)")
             return
