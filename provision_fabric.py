@@ -42,35 +42,24 @@ def provision_slice(slice_name="cloud_gaming_experiment", experiment_type="gamin
     DISK = 10  # Max allowed without VM.NoLimitDisk tag
     IMAGE = 'default_ubuntu_20'
     
-    # Try multiple sites for GPU availability
-    GPU_SITES = ['NCSA', 'TACC', 'SALT', 'MAX', 'MICH', 'UTAH']  # Sites likely to have GPUs
+    # GPU configuration - RTX6000 more commonly available than Tesla T4
+    GPU_MODEL = 'GPU_RTX6000'  # Change to GPU_TeslaT4 if RTX6000 doesn't work
+    GPU_NAME = 'RTX6000'
+    
+    # Try multiple sites
+    GPU_SITES = ['TACC', 'NCSA', 'MAX', 'SALT', 'MICH', 'UTAH']
     
     print(f"Checking GPU availability across sites...")
+    print(f"Looking for: {GPU_NAME}")
+    print("(If this fails, GPUs may all be reserved - try again later)\n")
     
-    # Find a site with available Tesla T4 GPUs
-    SITE = None
-    for potential_site in GPU_SITES:
-        try:
-            print(f"  Checking {potential_site}...")
-            # Get site advertisement
-            available = fablib.get_resources()
-            site_info = available.get(potential_site, {})
-            
-            # Check for GPU availability
-            if 'GPU_TeslaT4' in str(site_info):
-                SITE = potential_site
-                print(f"✓ Found GPUs at {SITE}")
-                break
-        except Exception as e:
-            print(f"  {potential_site}: Unable to check ({e})")
-            continue
+    # Simple heuristic: Try TACC first (historically good GPU availability)
+    SITE = 'TACC'
     
-    if SITE is None:
-        print("No Tesla T4 GPUs available at any site")
-        print("Trying NCSA as fallback...")
-        SITE = 'NCSA'  # Best chance for GPUs
-    
-    print(f"\nUsing site: {SITE}")
+    print(f"Using site: {SITE} with {GPU_NAME} GPUs")
+    print("Note: Will attempt provisioning. If it fails, try:")
+    print("  1. Wait 30-60 minutes and retry")
+    print("  2. Or set GPU_MODEL='GPU_TeslaT4' and try different site\n")
 
     if experiment_type == "gaming":
         # Cloud Gaming Kill-Switch Experiment (4 nodes)
@@ -79,13 +68,13 @@ def provision_slice(slice_name="cloud_gaming_experiment", experiment_type="gamin
         # Node A: Gamer/Sender (GPU)
         print("Adding Gamer A (GPU sender)...")
         gamer_a = slice.add_node(name='gamer-a', site=SITE, cores=CORES, ram=RAM, disk=DISK, image=IMAGE)
-        gamer_a.add_component(model='GPU_TeslaT4', name='gpu1')
+        gamer_a.add_component(model=GPU_MODEL, name='gpu1')
         iface_a = gamer_a.add_component(model='NIC_Basic', name='nic1').get_interfaces()[0]
 
         # Node B: Receiver/Monitor (GPU)
         print("Adding Receiver B (GPU receiver)...")
         receiver_b = slice.add_node(name='receiver-b', site=SITE, cores=CORES, ram=RAM, disk=DISK, image=IMAGE)
-        receiver_b.add_component(model='GPU_TeslaT4', name='gpu1')
+        receiver_b.add_component(model=GPU_MODEL, name='gpu1')
         iface_b = receiver_b.add_component(model='NIC_Basic', name='nic1').get_interfaces()[0]
 
         # Node C: Router/Signaling
@@ -109,13 +98,13 @@ def provision_slice(slice_name="cloud_gaming_experiment", experiment_type="gamin
         # Worker A
         print("Adding Worker A...")
         worker_a = slice.add_node(name='worker-a', site=SITE, cores=CORES, ram=RAM, disk=DISK, image=IMAGE)
-        worker_a.add_component(model='GPU_TeslaT4', name='gpu1')
+        worker_a.add_component(model=GPU_MODEL, name='gpu1')
         iface_a = worker_a.add_component(model='NIC_Basic', name='nic1').get_interfaces()[0]
 
         # Worker B
         print("Adding Worker B...")
         worker_b = slice.add_node(name='worker-b', site=SITE, cores=CORES, ram=RAM, disk=DISK, image=IMAGE)
-        worker_b.add_component(model='GPU_TeslaT4', name='gpu1')
+        worker_b.add_component(model=GPU_MODEL, name='gpu1')
         iface_b = worker_b.add_component(model='NIC_Basic', name='nic1').get_interfaces()[0]
 
         # Scheduler C
