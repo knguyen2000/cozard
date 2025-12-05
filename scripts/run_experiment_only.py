@@ -129,13 +129,24 @@ def download_test_video(slice):
     
     # Verify by checking file size
     verify_size = node.execute("stat -c%s game_clip.mp4 2>/dev/null || echo 0")
+    logger.info(f"Verification check: exit_code={verify_size[0]}, output='{verify_size[1] if len(verify_size) > 1 else 'NO OUTPUT'}'")
+    
     try:
-        downloaded_size = int(verify_size[1].strip()) if verify_size[0] == 0 else 0
-        if downloaded_size > 100000000:  # >100MB means success
-            logger.info(f"✓ Video downloaded successfully ({downloaded_size / 1024 / 1024:.1f} MB)")
-            return
-    except:
-        pass
+        if verify_size[0] == 0 and len(verify_size) > 1:
+            size_str = verify_size[1].strip()
+            logger.info(f"Size string after strip: '{size_str}'")
+            downloaded_size = int(size_str)
+            logger.info(f"Parsed size: {downloaded_size} bytes ({downloaded_size / 1024 / 1024:.1f} MB)")
+            if downloaded_size > 100000000:  # >100MB means success
+                logger.info(f"✓ Video downloaded successfully ({downloaded_size / 1024 / 1024:.1f} MB)")
+                return
+            else:
+                logger.warning(f"File size ({downloaded_size} bytes) is less than 100MB threshold")
+        else:
+            logger.warning(f"Stat command failed or returned no output")
+    except Exception as e:
+        logger.error(f"Error parsing file size: {e}")
+        logger.error(f"Raw verify_size: {verify_size}")
     
     # If wget didn't work, try curl
     logger.warning("wget verification failed, trying curl...")
