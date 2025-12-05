@@ -106,47 +106,63 @@ def download_test_video(slice):
     
     node = slice.get_node('gamer-a')
     
-    # Check if already downloaded (using test command which is more reliable)
-    check_result = node.execute("test -f game_clip.mp4 && echo 'exists'")
-    if check_result[0] == 0 and 'exists' in check_result[1]:
-        logger.info("✓ Test video already exists, skipping download")
-        return
+    # Check file size (more reliable than existence checks)
+    # BigBuckBunny.mp4 is ~150MB, so anything >100MB is valid
+    size_check = node.execute("stat -c%s game_clip.mp4 2>/dev/null || echo 0")
+    try:
+        file_size = int(size_check[1].strip()) if size_check[0] == 0 else 0
+        if file_size > 100000000:  # >100MB
+            logger.info(f"✓ Test video already exists ({file_size / 1024 / 1024:.1f} MB), skipping download")
+            return
+    except:
+        pass  # Will download
     
-    logger.info("Downloading BigBuckBunny.mp4 (150MB, ~10 seconds)...")
+    logger.info("Downloading BigBuckBunny.mp4 (150MB, ~10-15 seconds)...")
     
-    # Try wget
+    # Download with wget
     cmd = "wget -O game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 2>&1"
+    logger.info("Running: wget...")
     result = node.execute(cmd)
     
-    # Wait a moment for file to sync
-    time.sleep(2)
+    # Wait for file system to sync
+    time.sleep(3)
     
-    # Verify download
-    verify_result = node.execute("test -f game_clip.mp4 && ls -lh game_clip.mp4")
+    # Verify by checking file size
+    verify_size = node.execute("stat -c%s game_clip.mp4 2>/dev/null || echo 0")
+    try:
+        downloaded_size = int(verify_size[1].strip()) if verify_size[0] == 0 else 0
+        if downloaded_size > 100000000:  # >100MB means success
+            logger.info(f"✓ Video downloaded successfully ({downloaded_size / 1024 / 1024:.1f} MB)")
+            return
+    except:
+        pass
     
-    if verify_result[0] == 0:
-        size_info = verify_result[1].strip() if len(verify_result) > 1 and verify_result[1] else "file exists"
-        logger.info(f"✓ Video downloaded successfully: {size_info}")
-    else:
-        # Try alternative: curl
-        logger.warning("wget may have failed, trying curl...")
-        curl_cmd = "curl -o game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-        curl_result = node.execute(curl_cmd)
-        
-        # Wait for file to sync
-        time.sleep(2)
-        
-        # Verify again
-        verify_curl = node.execute("test -f game_clip.mp4 && ls -lh game_clip.mp4")
-        if verify_curl[0] == 0:
-            logger.info("✓ Video downloaded using curl")
-        else:
-            # One last check - maybe file is there but commands are flaky
-            final_check = node.execute("ls game_clip.mp4")
-            if final_check[0] == 0:
-                logger.warning("⚠ File seems to exist despite verification failures - continuing")
-                return
-            raise RuntimeError("Failed to download test video with both wget and curl")
+    # If wget didn't work, try curl
+    logger.warning("wget verification failed, trying curl...")
+    curl_cmd = "curl -L -o game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 2>&1"
+    logger.info("Running: curl...")
+    curl_result = node.execute(curl_cmd)
+    
+    # Wait and verify
+    time.sleep(3)
+    final_size = node.execute("stat -c%s game_clip.mp4 2>/dev/null || echo 0")
+    try:
+        final_bytes = int(final_size[1].strip()) if final_size[0] == 0 else 0
+        if final_bytes > 100000000:
+            logger.info(f"✓ Video downloaded with curl ({final_bytes / 1024 / 1024:.1f} MB)")
+            return
+    except:
+        pass
+    
+    # Last resort - just check if file exists at all
+    logger.warning("Size verification failed, doing basic existence check...")
+    exists_check = node.execute("ls game_clip.mp4 2>&1")
+    if 'game_clip.mp4' in exists_check[1]:
+        logger.warning("⚠ File appears to exist but size verification failed - continuing anyway")
+        logger.warning("This may indicate the file is incomplete or corrupt")
+        return
+    
+    raise RuntimeError("Failed to download test video - file not found after wget and curl attempts")
 
 def run_experiment(slice):
     """Execute the cloud gaming experiment"""
