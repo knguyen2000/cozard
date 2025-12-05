@@ -132,7 +132,7 @@ def download_test_video(slice):
     logger.info("Downloading BigBuckBunny.mp4 (150MB, ~10-15 seconds)...")
     
     # Download with wget
-    cmd = "wget -O game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 2>&1"
+    cmd = "wget -O game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4 2>&1"
     logger.info("Running: wget...")
     result = node.execute(cmd)
     
@@ -172,7 +172,7 @@ def download_test_video(slice):
     
     # If wget didn't work, try curl
     logger.warning("wget verification failed, trying curl...")
-    curl_cmd = "curl -L -o game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 2>&1"
+    curl_cmd = "curl -L -o game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4 2>&1"
     logger.info("Running: curl...")
     curl_result = node.execute(curl_cmd)
     
