@@ -1,0 +1,6 @@
+cryptography==43.0.3
+aiortc
+opencv-python-headless
+numpy
+av
+aiohttp

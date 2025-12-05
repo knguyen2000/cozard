@@ -1,13 +1,16 @@
-name: Run Experiment on FABRIC
+name: Run Experiment on Existing Slice
 
 on:
-  # push:
-  #   branches: [main]
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+  workflow_dispatch: # Manual
 
 jobs:
-  experiment:
+  run-experiment:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -17,10 +20,13 @@ jobs:
         with:
           python-version: "3.10"
 
-      - name: Install Dependencies
+      - name: Install FABRIC Client
         run: |
+          sudo apt-get update
+          sudo apt-get install -y libopencv-dev python3-opencv gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
           python -m pip install --upgrade pip
-          pip install fabrictestbed-extensions pandas pyjwt
+          pip install fabrictestbed-extensions pandas pyjwt matplotlib
+          pip install -r requirements.txt
 
       - name: Configure FABRIC Credentials
         env:
@@ -36,7 +42,7 @@ jobs:
           python -c "import os; open(os.path.expanduser('~/.fabric/slice_key.pub'), 'w').write(os.environ['FABRIC_SLICE_PUB_KEY'])"
           chmod 600 ~/.fabric/bastion_key ~/.fabric/slice_key
 
-      - name: Create fabric_rc
+      - name: Create FABRIC Configuration
         run: |
           cat <<EOF > fabric_rc
           [DEFAULT]
@@ -51,20 +57,44 @@ jobs:
           FABRIC_SLICE_PUBLIC_KEY_FILE=/home/runner/.fabric/slice_key.pub
           EOF
 
-      - name: Deploy and Run Experiment
+      - name: Run Experiment (No Provisioning)
         env:
           FABRIC_LOG_LEVEL: INFO
           FABRIC_RC_FILE: ${{ github.workspace }}/fabric_rc
         run: |
-          python scripts/deploy_and_run.py
+          echo "Running experiment on existing slice..."
+          echo "This assumes slice 'cloud_gaming_experiment' already exists"
+          python scripts/run_experiment_only.py
+
+      - name: Generate Performance Graphs
+        if: always()
+        run: |
+          echo "Running visualization script..."
+          python3 scripts/plot_results.py
 
       - name: Upload Experiment Results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: experiment-results
+          name: experiment-results-${{ github.run_number }}
           path: |
+            gaming_metrics.csv
+            metrics_*.csv
+            chart_*.png
             *.log
-            *.csv
-            *.png
-            *.json
+          retention-days: 30
+
+      - name: Create Summary
+        if: always()
+        run: |
+          echo "## Experiment Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Slice**: Reused existing infrastructure" >> $GITHUB_STEP_SUMMARY
+          echo "**Runtime**: ~1-2 minutes (no provisioning)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f gaming_metrics.csv ]; then
+            echo "Results collected successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "No results file found" >> $GITHUB_STEP_SUMMARY
+          fi
