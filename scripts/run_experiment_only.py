@@ -114,8 +114,14 @@ def download_test_video(slice):
         file_size = 0
         if len(size_check) > 1 and size_check[1].strip():
             file_size = int(size_check[1].strip())
-        elif size_check[0] > 100000000:
-            file_size = size_check[0]  # FABRIC bug workaround
+        else:
+            # FABRIC bug: file size may be in exit_code as string
+            try:
+                exit_code_int = int(str(size_check[0]).strip())
+                if exit_code_int > 100000000:
+                    file_size = exit_code_int
+            except:
+                pass
         
         if file_size > 100000000:  # >100MB
             logger.info(f"✓ Test video already exists ({file_size / 1024 / 1024:.1f} MB), skipping download")
@@ -145,10 +151,15 @@ def download_test_video(slice):
             size_str = verify_size[1].strip()
             logger.info(f"Size string from output: '{size_str}'")
             downloaded_size = int(size_str)
-        elif verify_size[0] > 100000000:
-            # FABRIC bug: sometimes file size ends up in exit code field!
-            downloaded_size = verify_size[0]
-            logger.info(f"Size found in exit_code field: {downloaded_size}")
+        else:
+            # FABRIC bug: sometimes file size ends up in exit code field as a string!
+            try:
+                exit_code_int = int(str(verify_size[0]).strip())
+                if exit_code_int > 100000000:
+                    downloaded_size = exit_code_int
+                    logger.info(f"Size found in exit_code field: {downloaded_size}")
+            except:
+                pass
         
         if downloaded_size > 100000000:  # >100MB means success
             logger.info(f"✓ Video downloaded successfully ({downloaded_size / 1024 / 1024:.1f} MB)")
@@ -172,8 +183,13 @@ def download_test_video(slice):
         final_bytes = 0
         if len(final_size) > 1 and final_size[1].strip():
             final_bytes = int(final_size[1].strip())
-        elif final_size[0] > 100000000:
-            final_bytes = final_size[0]  # FABRIC bug workaround
+        else:
+            try:
+                exit_code_int = int(str(final_size[0]).strip())
+                if exit_code_int > 100000000:
+                    final_bytes = exit_code_int
+            except:
+                pass
         
         if final_bytes > 100000000:
             logger.info(f"✓ Video downloaded with curl ({final_bytes / 1024 / 1024:.1f} MB)")
