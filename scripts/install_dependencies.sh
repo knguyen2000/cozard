@@ -34,10 +34,11 @@ sudo apt-get install -y \
 echo "[3/5] Installing NVIDIA GStreamer plugins..."
 sudo apt-get install -y \
     gstreamer1.0-plugins-bad-nvcodec \
-    nvidia-utils-470 || echo "Note: NVENC may not be available on this node"
+    nvidia-utils-470 2>/dev/null || echo "Note: NVENC not available on this node (will use CPU encoding)"
 
-# Install Python dependencies
+# Install Python and pip
 echo "[4/5] Installing Python packages..."
+sudo apt-get install -y python3-pip
 pip3 install --user websockets
 
 # Install iperf3 for BBRv3 testing
