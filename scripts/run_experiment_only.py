@@ -106,23 +106,26 @@ def download_test_video(slice):
     
     node = slice.get_node('gamer-a')
     
-    # Check if already downloaded
-    check_result = node.execute("ls game_clip.mp4 2>/dev/null")
-    if check_result[0] == 0:
+    # Check if already downloaded (using test command which is more reliable)
+    check_result = node.execute("test -f game_clip.mp4 && echo 'exists'")
+    if check_result[0] == 0 and 'exists' in check_result[1]:
         logger.info("✓ Test video already exists, skipping download")
         return
     
-    logger.info("Downloading BigBuckBunny.mp4...")
+    logger.info("Downloading BigBuckBunny.mp4 (150MB, ~10 seconds)...")
     
     # Try wget
     cmd = "wget -O game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4 2>&1"
     result = node.execute(cmd)
     
-    # Verify download by checking if file exists
-    verify_result = node.execute("ls -lh game_clip.mp4 2>/dev/null")
+    # Wait a moment for file to sync
+    time.sleep(2)
+    
+    # Verify download
+    verify_result = node.execute("test -f game_clip.mp4 && ls -lh game_clip.mp4")
     
     if verify_result[0] == 0:
-        size_info = verify_result[1].strip() if len(verify_result) > 1 else "unknown size"
+        size_info = verify_result[1].strip() if len(verify_result) > 1 and verify_result[1] else "file exists"
         logger.info(f"✓ Video downloaded successfully: {size_info}")
     else:
         # Try alternative: curl
@@ -130,11 +133,19 @@ def download_test_video(slice):
         curl_cmd = "curl -o game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
         curl_result = node.execute(curl_cmd)
         
+        # Wait for file to sync
+        time.sleep(2)
+        
         # Verify again
-        verify_curl = node.execute("ls -lh game_clip.mp4 2>/dev/null")
+        verify_curl = node.execute("test -f game_clip.mp4 && ls -lh game_clip.mp4")
         if verify_curl[0] == 0:
             logger.info("✓ Video downloaded using curl")
         else:
+            # One last check - maybe file is there but commands are flaky
+            final_check = node.execute("ls game_clip.mp4")
+            if final_check[0] == 0:
+                logger.warning("⚠ File seems to exist despite verification failures - continuing")
+                return
             raise RuntimeError("Failed to download test video with both wget and curl")
 
 def run_experiment(slice):
