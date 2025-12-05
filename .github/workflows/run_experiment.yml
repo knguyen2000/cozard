@@ -56,7 +56,7 @@ jobs:
           FABRIC_LOG_LEVEL: INFO
           FABRIC_RC_FILE: ${{ github.workspace }}/fabric_rc
         run: |
-          python scripts/deploy_and_run.py
+          python scripts/run_gaming_experiment.py
 
       - name: Upload Experiment Results
         if: always()

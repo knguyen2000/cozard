@@ -54,7 +54,7 @@ jobs:
           FABRIC_LOG_LEVEL: INFO
           FABRIC_RC_FILE: ${{ github.workspace }}/fabric_rc
         run: |
-          python scripts/provision_fabric.py
+          python provision_fabric.py
 
       - name: Upload Artifacts (Logs & Data)
         if: always()
