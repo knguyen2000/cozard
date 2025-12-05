@@ -139,17 +139,20 @@ class WebRTCClient:
     def on_negotiation_needed(self, element):
         """Create and send offer"""
         logger.info("Negotiation needed - creating offer...")
-        promise = Gst.Promise.new_with_change_callback(self.on_offer_created, element, None)
+        # GStreamer 1.16.3 compatibility: use promise.wait() instead of callbacks
+        promise = Gst.Promise.new()
         element.emit('create-offer', None, promise)
-    
-    def on_offer_created(self, promise, element, _):
-        """Send offer to signaling server"""
         promise.wait()
+        self.on_offer_created(promise)
+    
+    def on_offer_created(self, promise):
+        """Send offer to signaling server"""
         reply = promise.get_reply()
         offer = reply.get_value('offer')
         
-        promise = Gst.Promise.new()
-        self.webrtc.emit('set-local-description', offer, promise)
+        promise2 = Gst.Promise.new()
+        self.webrtc.emit('set-local-description', offer, promise2)
+        promise2.wait()
         
         text = offer.sdp.as_text()
         msg = json.dumps({'sdp': {'type': 'offer', 'sdp': text}})

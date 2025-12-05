@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 PIPELINE_DESC = '''
 webrtcbin name=sendrecv bundle-policy=max-bundle stun-server=stun://stun.l.google.com:19302
+sendrecv. ! rtph264depay ! h264parse ! avdec_h264 ! videoconvert ! fakesink name=sink sync=false
 '''
 
 class PerformanceMonitor:

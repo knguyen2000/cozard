@@ -9,7 +9,7 @@ on:
 jobs:
   run-experiment:
     runs-on: ubuntu-latest
-    timeout-minutes: 30 # Faster since no provisioning
+    timeout-minutes: 60 # Faster since no provisioning
 
     steps:
       - name: Checkout Code
