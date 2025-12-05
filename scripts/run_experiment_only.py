@@ -44,13 +44,14 @@ def get_existing_slice(slice_name="cloud_gaming_experiment"):
         logger.error("\nPlease run provision_fabric.yml workflow first to create the slice!")
         sys.exit(1)
 
-def install_dependencies(slice):
-    """Install dependencies on all nodes"""
+def install_dependencies(slice, skip_on_error=True):
+    """Install dependencies on all nodes (optional if already installed)"""
     logger.info("\n" + "="*60)
     logger.info("Installing/Updating dependencies...")
     logger.info("="*60)
     
     script_path = Path(__file__).parent / "install_dependencies.sh"
+    failed_nodes = []
     
     for node_name in ['gamer-a', 'receiver-b', 'router-c', 'attacker-d']:
         logger.info(f"\n[{node_name}] Uploading install script...")
@@ -59,19 +60,28 @@ def install_dependencies(slice):
         # Retry logic for upload (SSH might not be ready)
         max_retries = 3
         retry_delay = 5
+        upload_success = False
         
         for attempt in range(max_retries):
             try:
                 # Upload install script
                 node.upload_file(str(script_path), 'install_dependencies.sh')
+                upload_success = True
                 break  # Success
             except Exception as e:
                 if attempt < max_retries - 1:
                     logger.warning(f"[{node_name}] Upload failed (attempt {attempt + 1}/{max_retries}), retrying in {retry_delay}s...")
                     time.sleep(retry_delay)
                 else:
-                    logger.error(f"[{node_name}] Upload failed after {max_retries} attempts")
-                    raise
+                    if skip_on_error:
+                        logger.warning(f"⚠ [{node_name}] Upload failed after {max_retries} attempts - SKIPPING (dependencies may already be installed)")
+                        failed_nodes.append(node_name)
+                    else:
+                        logger.error(f"[{node_name}] Upload failed after {max_retries} attempts")
+                        raise
+        
+        if not upload_success:
+            continue  # Skip this node
         
         # Execute installation
         logger.info(f"[{node_name}] Running installation...")
@@ -81,6 +91,10 @@ def install_dependencies(slice):
             logger.info(f"✓ [{node_name}] Dependencies ready")
         else:
             logger.warning(f"⚠ [{node_name}] Installation had issues (may already be installed)")
+    
+    if failed_nodes:
+        logger.warning(f"\nSkipped dependency installation on: {', '.join(failed_nodes)}")
+        logger.info("Continuing with experiment (assuming dependencies already installed from previous run)")
     
     logger.info("\n✓ Dependencies check complete")
 
