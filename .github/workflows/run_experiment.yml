@@ -73,41 +73,44 @@ jobs:
           try:
               df = pd.read_csv('baseline.csv')
               
-              fig, axes = plt.subplots(3, 1, figsize=(12, 10))
+              fig, ax = plt.subplots(1, 1, figsize=(10, 6))
               
-              # FPS over time
-              axes[0].plot(df['elapsed_sec'], df['fps'], color='blue', linewidth=1)
-              axes[0].set_xlabel('Time (seconds)')
-              axes[0].set_ylabel('FPS')
-              axes[0].set_title('Video Frame Rate Over Time')
-              axes[0].grid(True, alpha=0.3)
-              axes[0].axhline(y=30, color='green', linestyle='--', label='Target 30 FPS')
-              axes[0].legend()
+              # Throughput comparison
+              phases = df['phase'].tolist()
+              throughputs = df['throughput_mbps'].tolist()
+              colors = ['green' if p == 'baseline' else 'red' for p in phases]
               
-              # Stall events
-              stalls = df[df['is_stall'] == 1]
-              axes[1].scatter(stalls['elapsed_sec'], stalls['delta_ms'],
-                            color='red', alpha=0.6, s=50)
-              axes[1].set_xlabel('Time (seconds)')
-              axes[1].set_ylabel('Stall Duration (ms)')
-              axes[1].set_title('Stall Events (>100ms frame gaps)')
-              axes[1].grid(True, alpha=0.3)
-              axes[1].axhline(y=100, color='orange', linestyle='--', label='Stall Threshold')
-              axes[1].legend()
+              bars = ax.bar(range(len(phases)), throughputs, color=colors, alpha=0.7, edgecolor='black')
+              ax.set_xlabel('Experiment Phase', fontsize=12)
+              ax.set_ylabel('Throughput (Mbps)', fontsize=12)
+              ax.set_title('Network Throughput: Baseline vs BBRv3 Competition', fontsize=14, fontweight='bold')
+              ax.set_xticks(range(len(phases)))
+              ax.set_xticklabels([f"{p}\n({df.iloc[i]['flows']} flows)" for i, p in enumerate(phases)])
+              ax.grid(True, alpha=0.3, axis='y')
               
-              # Bitrate
-              axes[2].plot(df['elapsed_sec'], df['bitrate_kbps'], color='purple', linewidth=1)
-              axes[2].set_xlabel('Time (seconds)')
-              axes[2].set_ylabel('Bitrate (kbps)')
-              axes[2].set_title('Video Stream Bitrate')
-              axes[2].grid(True, alpha=0.3)
+              # Add value labels on bars
+              for i, (bar, val) in enumerate(zip(bars, throughputs)):
+                  height = bar.get_height()
+                  ax.text(bar.get_x() + bar.get_width()/2., height,
+                         f'{val:.1f} Mbps',
+                         ha='center', va='bottom', fontsize=10, fontweight='bold')
               
               plt.tight_layout()
               plt.savefig('gaming_performance.png', dpi=150, bbox_inches='tight')
               print("✓ Generated gaming_performance.png")
               
+              # Print summary
+              if len(throughputs) == 2:
+                  baseline, attack = throughputs
+                  change = ((attack - baseline) / baseline) * 100 if baseline > 0 else 0
+                  print(f"\nBaseline: {baseline:.2f} Mbps")
+                  print(f"Attack:   {attack:.2f} Mbps")
+                  print(f"Change:   {change:+.1f}%")
+              
           except Exception as e:
               print(f"Error generating graphs: {e}")
+              import traceback
+              traceback.print_exc()
           PYEOF
 
           python analyze_results.py
