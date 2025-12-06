@@ -205,124 +205,131 @@ def run_experiment(slice):
     gamer_ip = "192.168.10.10"
     logger.info(f"Using gamer IP: {gamer_ip}")
     
-    results = []
+    # --- EXPERIMENT PHASES ---
+    phases = [
+        {'name': 'baseline', 'cc': None, 'desc': 'Baseline (No Competition)'},
+        {'name': 'attack_bbr1', 'cc': 'bbr1', 'desc': 'Competition (10 BBRv1 flows)'},
+        {'name': 'attack_bbr3', 'cc': 'bbr', 'desc': 'Competition (10 BBRv3 flows)'}
+    ]
     
-    # Phase 1: Baseline - gaming stream with no competition
-    logger.info("\n[BASELINE] Testing gaming stream (1 CUBIC flow, NO competition)...")
-    gamer.execute("pkill -f iperf3")  # Clean up any existing
+    experiment_results = []
     
-    # Start iperf3 server on receiver (simulates gaming client)
-    receiver_ip = "192.168.10.11"
-    receiver.execute("pkill -f iperf3")
-    receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
-    time.sleep(5)  # Wait for server to start
-    
-    # Gaming stream: gamer -> receiver (CUBIC, represents gaming traffic)
-    baseline_result = gamer.execute(f"iperf3 -c {receiver_ip} -t 15 -J 2>&1")
-    time.sleep(2)
-    
-    # Parse iperf3 JSON output
-    try:
-        # Handle fabric execute return values (can be 2 or 3 elements)
-        if len(baseline_result) == 3:
-            json_output = baseline_result[1] if baseline_result[1].strip() else baseline_result[2]
-        else:
-            json_output = baseline_result[0] if baseline_result[0].strip() else baseline_result[1]
+    for phase in phases:
+        logger.info("\n" + "="*60)
+        logger.info(f"PHASE: {phase['desc']}")
+        logger.info("="*60)
+        
+        # Cleanup previous runs
+        gamer.execute("pkill -f iperf3")
+        attacker.execute("pkill -f iperf3")
+        receiver.execute("pkill -f iperf3")
+        time.sleep(2)
+        
+        # 1. Start Receiver (Gamer Stream Server)
+        # Receiver listens for gaming stream
+        receiver_ip = "192.168.10.11"
+        receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
+        time.sleep(5)
+        
+        # 2. Setup Competition (if not baseline)
+        if phase['cc']:
+            logger.info(f"Starting {phase['desc']}...")
             
-        baseline_data = json.loads(json_output)
-        baseline_throughput = baseline_data['end']['sum_received']['bits_per_second'] / 1_000_000  # Mbps
-        logger.info(f"✓ Baseline gaming throughput: {baseline_throughput:.2f} Mbps")
-        results.append({
-            'phase': 'baseline',
-            'duration': 15,
-            'throughput_mbps': baseline_throughput,
-            'flows': 1,
-            'congestion_control': 'cubic',
-            'description': 'Gaming stream (no competition)'
-        })
-    except Exception as e:
-        logger.error(f"Failed to parse baseline: {e}")
-        logger.error(f"Output: {baseline_result}")
-        baseline_throughput = 0
-    
-    # Phase 2: Attack - gaming stream WITH BBR competition
-    logger.info("\n[ATTACK] Testing gaming stream WITH 10 BBR competing flows...")
-    receiver.execute("pkill -f iperf3")
-    receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
-    time.sleep(5)  # Wait for server to start
-    
-    # Start BBR competition from attacker -> gamer (simulates attack traffic)
-    gamer.execute("pkill -f iperf3")
-    gamer.execute_thread("iperf3 -s -p 5202 > iperf_attack_server.log 2>&1")
-    time.sleep(5)  # Wait for server to start
-    
-    # Launch BBR competing flows in background
-    attacker.execute_thread(f"iperf3 -c {gamer_ip} -p 5202 -C bbr -P 10 -t 30 > iperf_attack_client.log 2>&1")
-    logger.info("✓ BBR competition started (10 flows attacking gamer)")
-    time.sleep(2)  # Let BBR flows ramp up
-    
-    # Now measure gaming stream throughput WITH competition
-    attack_result = gamer.execute(f"iperf3 -c {receiver_ip} -t 15 -J 2>&1")
-    time.sleep(2)
-    
-    try:
-        if len(attack_result) == 3:
-            json_output = attack_result[1] if attack_result[1].strip() else attack_result[2]
-        else:
-            json_output = attack_result[0] if attack_result[0].strip() else attack_result[1]
+            # Start Server on Gamer (to receive attack traffic from Attacker)
+            # Attacker -> Gamer
+            gamer.execute_thread("iperf3 -s -p 5202 > iperf_attack_server.log 2>&1")
+            time.sleep(5)
             
-        attack_data = json.loads(json_output)
-        attack_throughput = attack_data['end']['sum_received']['bits_per_second'] / 1_000_000  # Mbps
-        logger.info(f"✓ Gaming throughput under attack: {attack_throughput:.2f} Mbps")
-        results.append({
-            'phase': 'attack',
-            'duration': 15,
-            'throughput_mbps': attack_throughput,
-            'flows': 1,
-            'congestion_control': 'cubic',
-            'description': 'Gaming stream (with 10 BBR flows competing)'
-        })
-    except Exception as e:
-        logger.error(f"Failed to parse attack: {e}")
-        logger.error(f"Output: {attack_result}")
-        attack_throughput = 0
-    
+            # Start Attacker Clients (10 flows)
+            # Note: We use the specific CC algorithm here (-C bbr1 or -C bbr)
+            attacker.execute_thread(f"iperf3 -c {gamer_ip} -p 5202 -C {phase['cc']} -P 10 -t 30 > iperf_attack_client.log 2>&1")
+            logger.info(f"Started 10 competing flows using {phase['cc']}")
+            time.sleep(5) # Allow ramp up
+            
+        # 3. Measurement (Gamer Client -> Receiver)
+        # We always use CUBIC for the gamer stream (simulating standard app)
+        logger.info("Measuring Gamer Throughput (CUBIC)...")
+        # Ensure we capture standard error too
+        result = gamer.execute(f"iperf3 -c {receiver_ip} -t 15 -C cubic -J 2>&1")
+        
+        try:
+            # Handle potential 2 or 3 tuple return
+            if len(result) == 3:
+                json_out = result[1] if result[1].strip() else result[2]
+            else:
+                json_out = result[0] if result[0].strip() else result[1]
+                
+            data = json.loads(json_out)
+            throughput = data['end']['sum_received']['bits_per_second'] / 1_000_000
+            
+            logger.info(f"✓ Result: {throughput:.2f} Mbps")
+            
+            experiment_results.append({
+                'phase': phase['name'],
+                'throughput_mbps': throughput,
+                'competition': phase['cc'] if phase['cc'] else 'none',
+                'description': phase['desc']
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to parse result: {e}")
+            logger.error(result)
+
     # Clean up
     attacker.execute("pkill -f iperf3")
     gamer.execute("pkill -f iperf3")
     receiver.execute("pkill -f iperf3")
     
-    # Generate results CSV
-    logger.info("\n" + "="*60)
-    logger.info("Generating results CSV...")
-    logger.info("="*60)
-    
-    with open('baseline.csv', 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['phase', 'duration', 'throughput_mbps', 'flows', 'congestion_control', 'description'])
+    # Generate CSV
+    logger.info("\nGenerating comparisons.csv...")
+    with open('comparisons.csv', 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=['phase', 'throughput_mbps', 'competition', 'description'])
         writer.writeheader()
-        writer.writerows(results)
-    
-    logger.info("✓ Created baseline.csv")
-    
-    # Summary
-    logger.info("\n" + "="*60)
-    logger.info("EXPERIMENT RESULTS - BBR COMPETITION IMPACT")
-    logger.info("="*60)
-    logger.info(f"Gaming stream (baseline):       {baseline_throughput:.2f} Mbps")
-    logger.info(f"Gaming stream (under attack):   {attack_throughput:.2f} Mbps")
-    
-    if baseline_throughput > 0:
-        impact = ((attack_throughput - baseline_throughput) / baseline_throughput) * 100
-        degradation = baseline_throughput - attack_throughput
-        logger.info(f"Throughput degradation:         {degradation:.2f} Mbps ({impact:.1f}%)")
-        logger.info("")
-        logger.info("This shows how BBR competing traffic impacts gaming performance!")
-    
-    logger.info("="*60)
-    
+        writer.writerows(experiment_results)
+        
+    logger.info("✓ Created comparisons.csv")
+
+    # Generate Local Graph (if possible)
+    try:
+        import matplotlib.pyplot as plt
+        
+        df = experiment_results
+        names = ['Baseline', 'BBRv1 Attack', 'BBRv3 Attack']
+        # Helper to get values safely
+        def get_val(pname):
+            for x in df:
+                if x['phase'] == pname:
+                    return x['throughput_mbps']
+            return 0
+            
+        values = [get_val('baseline'), get_val('attack_bbr1'), get_val('attack_bbr3')]
+        colors = ['green', 'orange', 'red']
+        
+        plt.figure(figsize=(10, 6))
+        bars = plt.bar(names, values, color=colors, edgecolor='black')
+        plt.title('Network Throughput: BBRv1 vs BBRv3 Competition')
+        plt.ylabel('User Throughput (Mbps)')
+        plt.grid(axis='y', alpha=0.3)
+        
+        # Add labels
+        for bar in bars:
+            height = bar.get_height()
+            if height > 0:
+                plt.text(bar.get_x() + bar.get_width()/2., height,
+                        f'{height:.0f} Mbps', ha='center', va='bottom', fontweight='bold')
+                     
+        plt.savefig('comparison_graph.png')
+        logger.info("✓ Generated comparison_graph.png locally")
+        
+        # Print summary table
+        logger.info("\nSummary:")
+        for res in experiment_results:
+            logger.info(f"{res['description']:<30}: {res['throughput_mbps']:.2f} Mbps")
+            
+    except ImportError:
+        logger.warning("matplotlib not found, skipping local graph generation. apt-get install python3-matplotlib if needed.")
+
     logger.info("\n✓ Experiment complete!")
-    logger.info("\nResults show impact of BBR competition on gaming traffic")
-    logger.info("baseline.csv contains the throughput measurements")
 
 def main():
     """Main orchestration"""
