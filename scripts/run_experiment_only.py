@@ -112,7 +112,12 @@ def run_experiment(slice):
     
     # Parse iperf3 JSON output
     try:
-        json_output = baseline_result[1] if baseline_result[1].strip() else baseline_result[2]
+        # Handle fabric execute return values (can be 2 or 3 elements)
+        if len(baseline_result) == 3:
+            json_output = baseline_result[1] if baseline_result[1].strip() else baseline_result[2]
+        else:
+            json_output = baseline_result[0] if baseline_result[0].strip() else baseline_result[1]
+            
         baseline_data = json.loads(json_output)
         baseline_throughput = baseline_data['end']['sum_received']['bits_per_second'] / 1_000_000  # Mbps
         logger.info(f"✓ Baseline gaming throughput: {baseline_throughput:.2f} Mbps")
@@ -150,7 +155,11 @@ def run_experiment(slice):
     time.sleep(2)
     
     try:
-        json_output = attack_result[1] if attack_result[1].strip() else attack_result[2]
+        if len(attack_result) == 3:
+            json_output = attack_result[1] if attack_result[1].strip() else attack_result[2]
+        else:
+            json_output = attack_result[0] if attack_result[0].strip() else attack_result[1]
+            
         attack_data = json.loads(json_output)
         attack_throughput = attack_data['end']['sum_received']['bits_per_second'] / 1_000_000  # Mbps
         logger.info(f"✓ Gaming throughput under attack: {attack_throughput:.2f} Mbps")
