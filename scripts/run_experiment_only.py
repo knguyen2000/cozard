@@ -104,7 +104,7 @@ def run_experiment(slice):
     receiver_ip = "192.168.10.11"
     receiver.execute("pkill -f iperf3")
     receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
-    time.sleep(2)
+    time.sleep(5)  # Wait for server to start
     
     # Gaming stream: gamer -> receiver (CUBIC, represents gaming traffic)
     baseline_result = gamer.execute(f"iperf3 -c {receiver_ip} -t 15 -J 2>&1")
@@ -133,12 +133,12 @@ def run_experiment(slice):
     logger.info("\n[ATTACK] Testing gaming stream WITH 10 BBR competing flows...")
     receiver.execute("pkill -f iperf3")
     receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
-    time.sleep(2)
+    time.sleep(5)  # Wait for server to start
     
     # Start BBR competition from attacker -> gamer (simulates attack traffic)
     gamer.execute("pkill -f iperf3")
     gamer.execute_thread("iperf3 -s -p 5202 > iperf_attack_server.log 2>&1")
-    time.sleep(2)
+    time.sleep(5)  # Wait for server to start
     
     # Launch BBR competing flows in background
     attacker.execute_thread(f"iperf3 -c {gamer_ip} -p 5202 -C bbr -P 10 -t 30 > iperf_attack_client.log 2>&1")
