@@ -55,6 +55,48 @@ def run_experiment(slice):
     attacker = slice.get_node('attacker-d')
     receiver = slice.get_node('receiver-b')
     
+    # --- BBRv3 KERNEL INSTALLATION ---
+    logger.info("\n[SETUP] Checking kernel version for BBRv3 support...")
+    nodes_to_reboot = []
+    
+    for node_name, node in [('gamer', gamer), ('attacker', attacker), ('receiver', receiver)]:
+        kernel_version = node.execute("uname -r")[1].strip()
+        logger.info(f"{node_name} kernel: {kernel_version}")
+        
+        if "bbrv3" not in kernel_version:
+            logger.info(f"Installing BBRv3 kernel on {node_name}...")
+            
+            # Download packages
+            base_url = "https://github.com/Zxilly/bbr-v3-pkg/releases/download/2024-10-08-104853"
+            headers_deb = "linux-headers-6.4.0-bbrv3_6.4.0-g7542cc7c41c0-1_amd64.deb"
+            image_deb = "linux-image-6.4.0-bbrv3_6.4.0-g7542cc7c41c0-1_amd64.deb"
+            
+            node.execute(f"wget -q {base_url}/{headers_deb}")
+            node.execute(f"wget -q {base_url}/{image_deb}")
+            
+            # Install kernel (non-interactive)
+            logger.info(f"Installing packages on {node_name}...")
+            node.execute(f"sudo DEBIAN_FRONTEND=noninteractive dpkg -i {headers_deb} {image_deb}")
+            
+            nodes_to_reboot.append(node)
+    
+    if nodes_to_reboot:
+        logger.info("\n[SETUP] Rebooting nodes to load BBRv3 kernel (this takes ~60s)...")
+        for node in nodes_to_reboot:
+            # Issue reboot command but don't wait for result (connection closes)
+            try:
+                node.execute("sudo reboot", quiet=True)
+            except Exception:
+                pass # Expected connection drop
+        
+        # Wait for nodes to come back
+        logger.info("Waiting for nodes to reboot...")
+        time.sleep(60)
+        slice.wait_ssh(timeout=300, interval=10)
+        logger.info("✓ Nodes back online with BBRv3!")
+    else:
+        logger.info("✓ All nodes already verified with BBRv3 kernel")
+
     # Ensure iperf3 is installed on ALL nodes
     logger.info("\n[SETUP] Checking iperf3 installation...")
     for node_name, node in [('gamer', gamer), ('attacker', attacker), ('receiver', receiver)]:
@@ -68,10 +110,10 @@ def run_experiment(slice):
         else:
             logger.info(f"✓ iperf3 already installed on {node_name}")
     
-    # Enable BBR congestion control
-    logger.info("\n[SETUP] Enabling BBR congestion control...")
+    # Enable BBRv3 congestion control
+    logger.info("\n[SETUP] Enabling BBRv3 congestion control...")
     for node_name, node in [('gamer', gamer), ('attacker', attacker), ('receiver', receiver)]:
-        # Load BBR module
+        # Load BBR module (v3 is backward compatible with tcp_bbr name)
         node.execute("sudo modprobe tcp_bbr")
         
         # Configure sysctl
@@ -82,7 +124,7 @@ def run_experiment(slice):
         # Verify BBR is available
         result = node.execute("sysctl net.ipv4.tcp_available_congestion_control")
         if "bbr" in result[1]:
-            logger.info(f"✓ BBR enabled on {node_name}")
+            logger.info(f"✓ BBR verified on {node_name}")
         else:
             logger.warning(f"⚠ BBR may not be available on {node_name}: {result[1]}")
     
