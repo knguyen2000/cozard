@@ -60,7 +60,9 @@ def run_experiment(slice):
         check = node.execute("which iperf3")
         if not check[1].strip():
             logger.warning(f"iperf3 not found on {node_name}, installing...")
-            node.execute("sudo apt-get update -qq && sudo apt-get install -y iperf3")
+            # Use non-interactive mode to prevent debconf hangs
+            node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get update -qq")
+            node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y iperf3")
             logger.info(f"✓ Installed iperf3 on {node_name}")
         else:
             logger.info(f"✓ iperf3 already installed on {node_name}")
