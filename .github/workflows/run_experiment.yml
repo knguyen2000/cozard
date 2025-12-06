@@ -23,7 +23,7 @@ jobs:
       - name: Install FABRIC Client
         run: |
           python -m pip install --upgrade pip
-          pip install fabrictestbed-extensions pandas pyjwt
+          pip install fabrictestbed-extensions pandas pyjwt matplotlib
 
       - name: Configure FABRIC Credentials
         env:
@@ -66,8 +66,6 @@ jobs:
       - name: Generate Performance Graphs
         if: always()
         run: |
-          pip install matplotlib pandas
-
           cat <<'PYEOF' > analyze_results.py
           import pandas as pd
           import matplotlib.pyplot as plt

@@ -242,12 +242,14 @@ def run_experiment(slice):
     # Start signaling server
     logger.info("Starting signaling server on Router C...")
     router.execute_thread("python3 signaling.py > signaling.log 2>&1")
-    time.sleep(3)
+    logger.info("⏳ Waiting 10 seconds for signaling server to initialize...")
+    time.sleep(10)  # Increased from 3s - give server time to bind
     
     # Start receiver
     logger.info("Starting receiver on Node B...")
     receiver.execute_thread("python3 monitor_receiver.py ws://192.168.10.12:8443 baseline.csv > receiver.log 2>&1")
-    time.sleep(3)
+    logger.info("⏳ Waiting 5 seconds for receiver to connect...")
+    time.sleep(5)  # Increased from 3s
     
     # Start sender
     logger.info("Starting sender on Node A...")
@@ -291,11 +293,12 @@ def run_experiment(slice):
     
     # Download logs for debugging
     try:
+        router.download_file('signaling.log', 'signaling.log')
         receiver.download_file('receiver.log', 'receiver.log')
         gamer.download_file('sender.log', 'sender.log')
-        logger.info("✓ Downloaded log files")
-    except:
-        logger.warning("⚠ Some logs unavailable")
+        logger.info("✓ Downloaded log files (signaling, receiver, sender)")
+    except Exception as e:
+        logger.warning(f"⚠ Some logs unavailable: {e}")
     
     logger.info("\n✓ Experiment complete!")
     logger.info("\nNext steps:")
