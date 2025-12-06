@@ -53,10 +53,11 @@ def run_experiment(slice):
     
     gamer = slice.get_node('gamer-a')
     attacker = slice.get_node('attacker-d')
+    receiver = slice.get_node('receiver-b')
     
-    # Ensure iperf3 is installed
+    # Ensure iperf3 is installed on ALL nodes
     logger.info("\n[SETUP] Checking iperf3 installation...")
-    for node_name, node in [('gamer', gamer), ('attacker', attacker)]:
+    for node_name, node in [('gamer', gamer), ('attacker', attacker), ('receiver', receiver)]:
         check = node.execute("which iperf3")
         if not check[1].strip():
             logger.warning(f"iperf3 not found on {node_name}, installing...")
@@ -69,7 +70,7 @@ def run_experiment(slice):
     
     # Enable BBR congestion control
     logger.info("\n[SETUP] Enabling BBR congestion control...")
-    for node_name, node in [('gamer', gamer), ('attacker', attacker)]:
+    for node_name, node in [('gamer', gamer), ('attacker', attacker), ('receiver', receiver)]:
         # Load BBR module
         node.execute("sudo modprobe tcp_bbr")
         
@@ -100,7 +101,6 @@ def run_experiment(slice):
     gamer.execute("pkill -f iperf3")  # Clean up any existing
     
     # Start iperf3 server on receiver (simulates gaming client)
-    receiver = slice.get_node('receiver-b')
     receiver_ip = "192.168.10.11"
     receiver.execute("pkill -f iperf3")
     receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
