@@ -54,9 +54,20 @@ def run_experiment(slice):
     gamer = slice.get_node('gamer-a')
     attacker = slice.get_node('attacker-d')
     
+    # Ensure iperf3 is installed
+    logger.info("\n[SETUP] Checking iperf3 installation...")
+    for node_name, node in [('gamer', gamer), ('attacker', attacker)]:
+        check = node.execute("which iperf3")
+        if not check[1].strip():
+            logger.warning(f"iperf3 not found on {node_name}, installing...")
+            node.execute("sudo apt-get update -qq && sudo apt-get install -y iperf3")
+            logger.info(f"✓ Installed iperf3 on {node_name}")
+        else:
+            logger.info(f"✓ iperf3 already installed on {node_name}")
+    
     # Get gamer's IP address on the experiment network
     ip_result = gamer.execute("ip addr show")
-    logger.info(f"Gamer node network config:\n{ip_result[1]}")
+    logger.info(f"\nGamer node network config:\n{ip_result[1]}")
     
     # Use the data plane IP (typically 192.168.10.10)
     gamer_ip = "192.168.10.10"
