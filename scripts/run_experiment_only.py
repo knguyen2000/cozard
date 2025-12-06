@@ -65,6 +65,24 @@ def run_experiment(slice):
         else:
             logger.info(f"✓ iperf3 already installed on {node_name}")
     
+    # Enable BBR congestion control
+    logger.info("\n[SETUP] Enabling BBR congestion control...")
+    for node_name, node in [('gamer', gamer), ('attacker', attacker)]:
+        # Load BBR module
+        node.execute("sudo modprobe tcp_bbr")
+        
+        # Configure sysctl
+        node.execute("echo 'net.core.default_qdisc=fq' | sudo tee -a /etc/sysctl.conf")
+        node.execute("echo 'net.ipv4.tcp_congestion_control=bbr' | sudo tee -a /etc/sysctl.conf")
+        node.execute("sudo sysctl -p")
+        
+        # Verify BBR is available
+        result = node.execute("sysctl net.ipv4.tcp_available_congestion_control")
+        if "bbr" in result[1]:
+            logger.info(f"✓ BBR enabled on {node_name}")
+        else:
+            logger.warning(f"⚠ BBR may not be available on {node_name}: {result[1]}")
+    
     # Get gamer's IP address on the experiment network
     ip_result = gamer.execute("ip addr show")
     logger.info(f"\nGamer node network config:\n{ip_result[1]}")
@@ -75,54 +93,82 @@ def run_experiment(slice):
     
     results = []
     
-    # Phase 1: Baseline - single flow, no competition
-    logger.info("\n[BASELINE] Testing single TCP flow (no competition)...")
+    # Phase 1: Baseline - gaming stream with no competition
+    logger.info("\n[BASELINE] Testing gaming stream (1 CUBIC flow, NO competition)...")
     gamer.execute("pkill -f iperf3")  # Clean up any existing
-    gamer.execute_thread("iperf3 -s > iperf_server.log 2>&1")
+    
+    # Start iperf3 server on receiver (simulates gaming client)
+    receiver = slice.get_node('receiver-b')
+    receiver_ip = "192.168.10.11"
+    receiver.execute("pkill -f iperf3")
+    receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
     time.sleep(2)
     
-    baseline_result = attacker.execute(f"iperf3 -c {gamer_ip} -t 15 -J")
+    # Gaming stream: gamer -> receiver (CUBIC, represents gaming traffic)
+    baseline_result = gamer.execute(f"iperf3 -c {receiver_ip} -t 15 -J 2>&1")
     time.sleep(2)
     
     # Parse iperf3 JSON output
     try:
-        baseline_data = json.loads(baseline_result[1])
+        json_output = baseline_result[1] if baseline_result[1].strip() else baseline_result[2]
+        baseline_data = json.loads(json_output)
         baseline_throughput = baseline_data['end']['sum_received']['bits_per_second'] / 1_000_000  # Mbps
-        logger.info(f"✓ Baseline throughput: {baseline_throughput:.2f} Mbps")
+        logger.info(f"✓ Baseline gaming throughput: {baseline_throughput:.2f} Mbps")
         results.append({
             'phase': 'baseline',
             'duration': 15,
             'throughput_mbps': baseline_throughput,
             'flows': 1,
-            'congestion_control': 'cubic'
+            'congestion_control': 'cubic',
+            'description': 'Gaming stream (no competition)'
         })
     except Exception as e:
         logger.error(f"Failed to parse baseline: {e}")
+        logger.error(f"Output: {baseline_result}")
         baseline_throughput = 0
     
-    # Phase 2: Competition - 10 parallel BBRv3 flows
-    logger.info("\n[ATTACK] Testing with 10 parallel BBRv3 flows...")
-    gamer.execute("pkill -f iperf3")
-    gamer.execute_thread("iperf3 -s > iperf_server.log 2>&1")
+    # Phase 2: Attack - gaming stream WITH BBR competition
+    logger.info("\n[ATTACK] Testing gaming stream WITH 10 BBR competing flows...")
+    receiver.execute("pkill -f iperf3")
+    receiver.execute_thread("iperf3 -s > iperf_server.log 2>&1")
     time.sleep(2)
     
-    attack_result = attacker.execute(f"iperf3 -c {gamer_ip} -C bbr -P 10 -t 30 -J")
+    # Start BBR competition from attacker -> gamer (simulates attack traffic)
+    gamer.execute("pkill -f iperf3")
+    gamer.execute_thread("iperf3 -s -p 5202 > iperf_attack_server.log 2>&1")
+    time.sleep(2)
+    
+    # Launch BBR competing flows in background
+    attacker.execute_thread(f"iperf3 -c {gamer_ip} -p 5202 -C bbr -P 10 -t 30 > iperf_attack_client.log 2>&1")
+    logger.info("✓ BBR competition started (10 flows attacking gamer)")
+    time.sleep(2)  # Let BBR flows ramp up
+    
+    # Now measure gaming stream throughput WITH competition
+    attack_result = gamer.execute(f"iperf3 -c {receiver_ip} -t 15 -J 2>&1")
     time.sleep(2)
     
     try:
-        attack_data = json.loads(attack_result[1])
+        json_output = attack_result[1] if attack_result[1].strip() else attack_result[2]
+        attack_data = json.loads(json_output)
         attack_throughput = attack_data['end']['sum_received']['bits_per_second'] / 1_000_000  # Mbps
-        logger.info(f"✓ Attack throughput: {attack_throughput:.2f} Mbps")
+        logger.info(f"✓ Gaming throughput under attack: {attack_throughput:.2f} Mbps")
         results.append({
             'phase': 'attack',
-            'duration': 30,
+            'duration': 15,
             'throughput_mbps': attack_throughput,
-            'flows': 10,
-            'congestion_control': 'bbr'
+            'flows': 1,
+            'congestion_control': 'cubic',
+            'description': 'Gaming stream (with 10 BBR flows competing)'
         })
     except Exception as e:
         logger.error(f"Failed to parse attack: {e}")
+        logger.error(f"Output: {attack_result}")
         attack_throughput = 0
+    
+    # Clean up
+    attacker.execute("pkill -f iperf3")
+    gamer.execute("pkill -f iperf3")
+    receiver.execute("pkill -f iperf3")
     
     # Generate results CSV
     logger.info("\n" + "="*60)
@@ -130,7 +176,7 @@ def run_experiment(slice):
     logger.info("="*60)
     
     with open('baseline.csv', 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['phase', 'duration', 'throughput_mbps', 'flows', 'congestion_control'])
+        writer = csv.DictWriter(f, fieldnames=['phase', 'duration', 'throughput_mbps', 'flows', 'congestion_control', 'description'])
         writer.writeheader()
         writer.writerows(results)
     
@@ -138,19 +184,22 @@ def run_experiment(slice):
     
     # Summary
     logger.info("\n" + "="*60)
-    logger.info("EXPERIMENT RESULTS")
+    logger.info("EXPERIMENT RESULTS - BBR COMPETITION IMPACT")
     logger.info("="*60)
-    logger.info(f"Baseline (1 flow, CUBIC):  {baseline_throughput:.2f} Mbps")
-    logger.info(f"Attack (10 flows, BBRv3):  {attack_throughput:.2f} Mbps")
+    logger.info(f"Gaming stream (baseline):       {baseline_throughput:.2f} Mbps")
+    logger.info(f"Gaming stream (under attack):   {attack_throughput:.2f} Mbps")
     
     if baseline_throughput > 0:
         impact = ((attack_throughput - baseline_throughput) / baseline_throughput) * 100
-        logger.info(f"Throughput change:         {impact:+.1f}%")
+        degradation = baseline_throughput - attack_throughput
+        logger.info(f"Throughput degradation:         {degradation:.2f} Mbps ({impact:.1f}%)")
+        logger.info("")
+        logger.info("This shows how BBR competing traffic impacts gaming performance!")
     
     logger.info("="*60)
     
     logger.info("\n✓ Experiment complete!")
-    logger.info("\nResults show BBRv3's ability to compete for bandwidth")
+    logger.info("\nResults show impact of BBR competition on gaming traffic")
     logger.info("baseline.csv contains the throughput measurements")
 
 def main():

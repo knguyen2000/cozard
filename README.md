@@ -1,142 +1,109 @@
-# Cloud Gaming Kill-Switch Experiment
+# Network Throughput Competition Experiment
 
-> **Testing if BBRv3 downloads "kill" WebRTC cloud gaming streams on L4S networks**
+> **Testing how BBR congestion control affects competing network traffic on FABRIC testbed**
 
-This experiment uses real WebRTC video encoded on Tesla T4 GPUs to test network competition, moving beyond synthetic iperf3 traffic used in most L4S research.
+This experiment measures the impact of BBR TCP flows on baseline network throughput using the FABRIC research infrastructure.
 
 ## Overview
 
-**Hypothesis**: A massive BBRv3 TCP download will starve a low-latency WebRTC gaming stream, causing frame stalls and FPS drops, even though L4S promises low latency.
+**Hypothesis**: Multiple BBR TCP flows will compete aggressively for bandwidth, demonstrating BBR's competitive behavior against standard CUBIC flows.
 
-**Hardware**: FABRIC testbed with Tesla T4 GPUs for NVENC hardware encoding
+**Hardware**: FABRIC testbed with 4-node topology
 
-**Metrics**: FPS, stall duration (frame gaps >100ms), bitrate
+**Metrics**: Network throughput (Mbps) for baseline vs competition scenarios
 
 ## Architecture
 
 ```
 4-Node Topology:
 ┌─────────────┐     ┌─────────────┐
-│  Gamer A    │────▶│ Receiver B  │  WebRTC Stream
-│  (GPU+NVENC)│     │  (Monitor)  │  (L4S marked)
+│  Gamer A    │────▶│ Receiver B  │  Baseline Traffic
+│  (Sender)   │     │  (Monitor)  │
 └─────────────┘     └─────────────┘
       │                    │
       └────────┬───────────┘
                │
          ┌─────┴──────┐
-         │  Router C  │  (Signaling + Legacy FIFO)
+         │  Router C  │  (L2 Bridge)
          └─────┬──────┘
                │
         ┌──────┴────────┐
-        │  Attacker D   │  (BBRv3 iperf3)
+        │  Attacker D   │  (BBR Competition)
         └───────────────┘
 ```
 
 ## Quick Start
 
-### Local Setup (Manual)
-
-```bash
-# 1. Install dependencies
-cd scripts
-bash install_dependencies.sh
-
-# 2. Download test video
-wget -O game_clip.mp4 http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4
-
-# 3. Start signaling server
-python3 signaling.py
-
-# 4. Start receiver (in another terminal)
-python3 monitor_receiver.py ws://192.168.10.12:8443 baseline.csv
-
-# 5. Start sender (in another terminal)
-python3 gamer_sender.py ws://192.168.10.12:8443 game_clip.mp4
-
-# 6. Launch BBRv3 attack (in another terminal)
-iperf3 -c <gamer_ip> -C bbr -P 10 -t 30
-```
-
 ### GitHub Actions (Automated)
 
 1. Configure FABRIC secrets in GitHub repository
-2. Manually trigger workflow: **Actions** → **Cloud Gaming Kill-Switch Experiment** → **Run workflow**
-3. Wait ~30-45 minutes for provisioning + experiment
+2. Manually trigger workflow: **Actions** → **Run Experiment on Existing Slice** → **Run workflow**
+3. Wait ~2-3 minutes for experiment completion
 4. Download artifacts: `baseline.csv`, `gaming_performance.png`
 
-## Scripts
+### Local Execution
 
-| File                       | Description                                         |
-| -------------------------- | --------------------------------------------------- |
-| `signaling.py`             | WebRTC signaling server (WebSocket broker)          |
-| `gamer_sender.py`          | GPU-accelerated video sender (NVENC)                |
-| `monitor_receiver.py`      | Performance monitor with FPS/stall tracking         |
-| `run_gaming_experiment.py` | Main orchestrator (FABRIC provisioning + execution) |
-| `install_dependencies.sh`  | Dependency installer (GStreamer, WebRTC, iperf3)    |
+```bash
+# Run experiment on existing FABRIC slice
+python scripts/run_experiment_only.py
+```
 
 ## Experiment Phases
 
-1. **Baseline (15s)**: WebRTC stream without competition
+1. **Baseline (15s)**: Single TCP flow without competition
 
-   - Measure steady-state FPS (target: 30-60 FPS)
-   - Record baseline latency and bitrate
+   - Measures maximum achievable throughput
+   - Uses CUBIC congestion control
 
-2. **Attack (30s)**: BBRv3 download starts
-   - 10 parallel iperf3 flows from Attacker D
-   - Monitor FPS drops, stall events, bitrate changes
+2. **Attack (15s)**: 10 parallel BBR flows competing
+   - BBR flows launched from Attacker node
+   - Baseline traffic continues during competition
+   - Measures throughput degradation
 
 ## Output
 
-- **`baseline.csv`**: Frame-by-frame metrics
+- **`baseline.csv`**: Throughput measurements
 
   ```csv
-  timestamp,frame_number,delta_ms,fps,is_stall,bitrate_kbps,elapsed_sec
-  1733456789.123,1,0.00,0.0,0,0.0,0.0
-  1733456789.156,2,33.20,30.1,0,4523.2,0.0
-  1733456789.503,3,347.50,2.9,1,4892.1,0.4  # STALL!
+  phase,duration,throughput_mbps,flows,congestion_control,description
+  baseline,15,18500.5,1,cubic,Gaming stream (no competition)
+  attack,15,2341.2,1,cubic,Gaming stream (with 10 BBR flows competing)
   ```
 
-- **`gaming_performance.png`**: Visualization graphs
-  - FPS over time
-  - Stall events scatter plot
-  - Bitrate timeline
+- **`gaming_performance.png`**: Bar chart comparing baseline vs attack throughput
 
 ## Expected Results
 
-**If BBRv3 causes stalls**:
+**BBR Competition Impact**:
 
-- Multiple frame gaps >100ms during attack phase
-- FPS drops below 20
-- Proves BBRv3 breaks gaming streams on legacy routers
-
-**If L4S survives**:
-
-- Steady FPS throughout
-- <5% frame loss
-- Validates L4S robustness
+- Significant throughput degradation during attack phase
+- Demonstrates BBR's aggressive bandwidth competition
+- Quantifies impact on concurrent traffic
 
 ## Hardware Requirements
 
-- **GPU**: Tesla T4 with NVENC support
-- **Disk**: ~1GB per node (GStreamer + dependencies)
+- **Nodes**: 4 FABRIC nodes (any CPU)
 - **Network**: L2 network (single FABRIC site)
+- **Software**: iperf3, Python 3.8+
 
-## Research Significance
+## Scripts
 
-This moves beyond synthetic iperf3 tests to **real-world WebRTC traffic**, making results more meaningful for:
+| File                     | Description                              |
+| ------------------------ | ---------------------------------------- |
+| `run_experiment_only.py` | Main experiment script (no provisioning) |
+| `provision_fabric.py`    | FABRIC slice provisioning                |
+| `delete_slice.py`        | Cleanup script                           |
 
-- Cloud gaming platforms (Stadia, GeForce NOW)
-- Video conferencing (Zoom, Teams)
-- Live streaming applications
+## Workflows
 
-**Novel contribution**: First work testing BBRv3 competition against GPU-encoded WebRTC streams.
+- `.github/workflows/provision_fabric.yml`: Provision FABRIC infrastructure
+- `.github/workflows/run_experiment.yml`: Run experiment on existing slice
 
 ## References
 
 - [FABRIC Testbed](https://portal.fabric-testbed.net/)
-- [L4S Architecture](https://datatracker.ietf.org/doc/html/rfc9330)
-- [BBRv3 Spec](https://datatracker.ietf.org/doc/draft-cardwell-iccrg-bbr-congestion-control/)
-- [GStreamer WebRTC](https://gstreamer.freedesktop.org/documentation/webrtc/index.html)
+- [BBR Congestion Control](https://github.com/google/bbr)
+- [iperf3](https://iperf.fr/)
 
 ## License
 
