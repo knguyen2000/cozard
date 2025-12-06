@@ -48,7 +48,7 @@ def get_existing_slice(slice_name="cloud_gaming_experiment"):
 def configure_network(slice):
     """
     Configures IP addresses on data plane interfaces after reboot.
-    Dynamically finds the data interface (non-management).
+    Uses robust Python-side filtering to find the correct interface.
     """
     logger.info("\n[NETWORK] Configuring Data Plane IPs...")
     
@@ -60,28 +60,49 @@ def configure_network(slice):
     }
 
     for node_name, ip_address in node_configs.items():
-        node = slice.get_node(node_name)
-        
-        # 1. Find the data interface name.
-        # We exclude loopback ('lo') and the management interface (usually 'enp3s0' or 'eth0')
-        # This command grabs the first available interface that isn't management.
-        cmd_find_iface = "ip -o link show | awk -F': ' '{print $2}' | grep -v 'lo' | grep -v 'enp3s0' | grep -v 'eth0' | head -n 1"
-        iface_name = node.execute(cmd_find_iface)[1].strip()
-        
-        if not iface_name:
-            logger.error(f"Could not find data interface for {node_name}")
+        try:
+            node = slice.get_node(node_name)
+        except Exception:
+            logger.warning(f"Node {node_name} not found, skipping config.")
             continue
-
-        logger.info(f"Configuring {node_name}: {iface_name} -> {ip_address}")
         
-        # 2. Configure IP and bring interface UP
+        # 1. Get list of all interfaces directly from sysfs
+        # This avoids issues with 'ip' command formatting or awk/grep failures
+        stdout, stderr = node.execute("ls /sys/class/net/")
+        if not stdout:
+            logger.error(f"Failed to list interfaces on {node_name}")
+            continue
+            
+        all_interfaces = stdout.strip().split()
+        
+        # 2. Filter in Python (safer than shell pipes)
+        # We look for interfaces that are NOT 'lo' (loopback) and NOT 'enp3s0' (management)
+        # distinct from the management interface (usually enp3s0 or eth0)
+        valid_ifaces = [iface for iface in all_interfaces 
+                        if iface != 'lo' 
+                        and 'enp3s0' not in iface 
+                        and 'eth0' not in iface]
+        
+        if not valid_ifaces:
+            logger.error(f"Could not find data interface for {node_name}. Found only: {all_interfaces}")
+            continue
+            
+        # Pick the first valid interface (likely enp7s0 or enp8s0)
+        iface_name = valid_ifaces[0]
+
+        logger.info(f"Configuring {node_name}: Found {iface_name} -> Assigning {ip_address}")
+        
+        # 3. Configure IP and bring interface UP
         node.execute(f"sudo ip addr flush dev {iface_name}")
         node.execute(f"sudo ip addr add {ip_address}/24 dev {iface_name}")
         node.execute(f"sudo ip link set dev {iface_name} up")
 
-    # 3. Verify connectivity (Ping test)
+    # 4. Verify connectivity (Ping test)
     logger.info("Verifying connectivity (Gamer -> Receiver)...")
     gamer = slice.get_node('gamer-a')
+    
+    # Allow a few seconds for links to come up
+    time.sleep(2)
     ping_res = gamer.execute("ping -c 3 192.168.10.11")
     
     if "0% packet loss" in ping_res[1]:
