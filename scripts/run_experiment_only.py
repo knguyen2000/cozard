@@ -309,8 +309,9 @@ def main():
         # Step 1: Get existing slice
         slice = get_existing_slice()
         
-        # Step 2: Install/update dependencies
-        install_dependencies(slice)
+        # Step 2: Install/update dependencies (SKIPPED - already done during provisioning)
+        # install_dependencies(slice)  # Takes 40+ min, skip since deps already installed
+        logger.info("⚠ Skipping dependency installation (assuming already done during provisioning)")
         
         # Step 3: Ensure test video exists
         download_test_video(slice)
