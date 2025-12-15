@@ -25,6 +25,7 @@ class GStreamerVideoTrack(VideoStreamTrack):
 
     def __init__(self, filename="game_clip.mp4"):
         super().__init__()
+        self._loop = asyncio.get_running_loop()
         
         if not os.path.exists(filename):
             logger.error(f"FATAL: Video file {filename} NOT FOUND! Falling back to videotestsrc")
@@ -131,6 +132,7 @@ class GStreamerVideoTrack(VideoStreamTrack):
             )
             frame = VideoFrame.from_ndarray(array, format="rgb24")
             self.current_frame = frame
+            self._loop.call_soon_threadsafe(self.frame_available.set)
         except Exception as e:
             logger.error(f"Frame creation error: {e}")
         finally:
