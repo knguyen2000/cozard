@@ -10,7 +10,7 @@ import sys
 import gi
 import numpy as np
 import fractions
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCConfiguration, RTCIceServer
 from av import VideoFrame
 
 gi.require_version('Gst', '1.0')
@@ -188,7 +188,12 @@ async def run(pc, signaling_ip, signaling_port):
         return
 
     await pc.setLocalDescription(await pc.createOffer())
-    payload = json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+    # Filter Local Candidates (Offer)
+    sdp_lines = pc.localDescription.sdp.splitlines()
+    filtered_lines = [line for line in sdp_lines if "10.30." not in line]
+    final_sdp = "\r\n".join(filtered_lines) + "\r\n"
+
+    payload = json.dumps({"sdp": final_sdp, "type": pc.localDescription.type})
     writer.write(payload.encode() + b"\n")
     await writer.drain()
 
@@ -197,6 +202,13 @@ async def run(pc, signaling_ip, signaling_port):
         return
         
     answer_json = json.loads(data.decode())
+    
+    # Filter Remote Candidates (Answer)
+    if "sdp" in answer_json:
+        sdp_lines = answer_json["sdp"].splitlines()
+        filtered_lines = [line for line in sdp_lines if "10.30." not in line]
+        answer_json["sdp"] = "\r\n".join(filtered_lines) + "\r\n"
+
     await pc.setRemoteDescription(RTCSessionDescription(sdp=answer_json["sdp"], type=answer_json["type"]))
     
     logger.info("Streaming Started. Checking NV-SMI...")
@@ -220,7 +232,8 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=8888)
     args = parser.parse_args()
 
-    pc = RTCPeerConnection()
+    pconfig = RTCIceServer(urls=["stun:stun.l.google.com:19302"])
+    pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=[pconfig]))
     loop = asyncio.get_event_loop()
     try:
         loop.run_until_complete(run(pc, args.receiver_ip, args.port))

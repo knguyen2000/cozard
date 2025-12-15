@@ -6,7 +6,7 @@ import time
 import os
 import csv
 import cv2
-from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack
+from aiortc import RTCPeerConnection, RTCSessionDescription, MediaStreamTrack, RTCConfiguration, RTCIceServer
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 
 # Configure logging
@@ -136,6 +136,12 @@ async def handle_client(reader, writer, pc, metrics):
     if not data:
         return
     offer_json = json.loads(data.decode())
+    # Filter Remote Candidates (Offer)
+    if "sdp" in offer_json:
+        sdp_lines = offer_json["sdp"].splitlines()
+        filtered_lines = [line for line in sdp_lines if "10.30." not in line]
+        offer_json["sdp"] = "\r\n".join(filtered_lines) + "\r\n"
+
     offer = RTCSessionDescription(sdp=offer_json["sdp"], type=offer_json["type"])
     
     await pc.setRemoteDescription(offer)
@@ -145,7 +151,12 @@ async def handle_client(reader, writer, pc, metrics):
     await pc.setLocalDescription(answer)
     
     # Send Answer
-    payload = json.dumps({"sdp": pc.localDescription.sdp, "type": pc.localDescription.type})
+    # Filter Local Candidates (Answer)
+    sdp_lines = pc.localDescription.sdp.splitlines()
+    filtered_lines = [line for line in sdp_lines if "10.30." not in line]
+    final_sdp = "\r\n".join(filtered_lines) + "\r\n"
+
+    payload = json.dumps({"sdp": final_sdp, "type": pc.localDescription.type})
     writer.write(payload.encode() + b"\n")
     await writer.drain()
     
@@ -158,7 +169,8 @@ async def handle_client(reader, writer, pc, metrics):
         pass
 
 def run_server(ip, port, metrics):
-    pc = RTCPeerConnection()
+    pconfig = RTCIceServer(urls=["stun:stun.l.google.com:19302"])
+    pc = RTCPeerConnection(configuration=RTCConfiguration(iceServers=[pconfig]))
 
     @pc.on("track")
     def on_track(track):
