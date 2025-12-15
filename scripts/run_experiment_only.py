@@ -54,7 +54,13 @@ def configure_routed_network(slice):
                     node.execute(f"sudo ip addr add 192.168.{ip}/24 dev {ifaces[0]}")
                     node.execute(f"sudo ip link set dev {ifaces[0]} up")
                     node.execute(f"sudo ip route add 192.168.20.0/24 via 192.168.10.1")
+                    # Flush IPTABLES to allow ICE/UDP
                     node.execute("sudo iptables -F") 
+                    node.execute("sudo iptables -X")
+                    node.execute("sudo iptables -P INPUT ACCEPT")
+                    node.execute("sudo iptables -P FORWARD ACCEPT")
+                    node.execute("sudo iptables -P OUTPUT ACCEPT")
+                    # Allow redirected ICMP just in case, but prefer DROP for experiment
                     node.execute("sudo iptables -I INPUT -p icmp --icmp-type redirect -j DROP")
                 break # Success
             except Exception as e:
@@ -70,6 +76,10 @@ def configure_routed_network(slice):
         receiver.execute(f"sudo ip link set dev {rec_ifaces[0]} up")
         receiver.execute(f"sudo ip route add 192.168.10.0/24 via 192.168.20.1")
         receiver.execute("sudo iptables -F")
+        receiver.execute("sudo iptables -X")
+        receiver.execute("sudo iptables -P INPUT ACCEPT")
+        receiver.execute("sudo iptables -P FORWARD ACCEPT")
+        receiver.execute("sudo iptables -P OUTPUT ACCEPT")
         receiver.execute("sudo iptables -I INPUT -p icmp --icmp-type redirect -j DROP")
 
     for n in [gamer, router, receiver, attacker]:
@@ -143,10 +153,10 @@ def check_and_install_gpu_drivers(slice, node):
              logger.info(f"SUCCESS: GPU Drivers loaded manually on {node.get_name()}.")
         else:
              logger.error(f"FAIL: GPU Drivers still not working on {node.get_name()} after install/reboot.")
-
-    # Verify GStreamer NVENC
-    logger.info(f"Verifying GStreamer NVENC/NVDEC on {node.get_name()}...")
-    # Update registry
+    
+    # Verify GStreamer NVENC (Force Registry Rebuild)
+    logger.info(f"Rebuilding GStreamer Registry on {node.get_name()}...")
+    node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
     node.execute("gst-inspect-1.0 > /dev/null 2>&1", quiet=True) 
     
     stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
@@ -301,7 +311,7 @@ def run_experiment(slice):
             # Start Receiver (Monitor) with Logging
             logger.info("Starting WebRTC Monitor (Receiver)...")
             # Redirect stdout/stderr to monitor.log for debugging 0 FPS issue
-            receiver.execute_thread("python3 monitor_webrtc.py --port 8888 --output gaming_metrics.csv > monitor.log 2>&1")
+            receiver.execute_thread("python3 monitor_webrtc.py --port 8888 --local-ip 192.168.20.2 --output gaming_metrics.csv > monitor.log 2>&1")
 
             if phase['attack']:
                 logger.info("Starting iperf3 Server (Receiver)...")

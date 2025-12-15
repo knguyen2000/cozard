@@ -174,15 +174,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="WebRTC Monitor Receiver")
     parser.add_argument("--port", type=int, default=8888, help="Signaling port")
     parser.add_argument("--output", default="gaming_metrics.csv", help="Output CSV file")
+    parser.add_argument("--local-ip", default="0.0.0.0", help="Local IP to bind to")
     args = parser.parse_args()
 
     metrics = MetricsRecorder(args.output)
     
     loop = asyncio.get_event_loop()
-    server_coro, pc = run_server("0.0.0.0", args.port, metrics)
+    server_coro, pc = run_server(args.local_ip, args.port, metrics)
     server = loop.run_until_complete(server_coro)
     
-    logger.info(f"Monitor listening on 0.0.0.0:{args.port}")
+    logger.info(f"Monitor listening on {args.local_ip}:{args.port}")
 
     try:
         loop.run_forever()
