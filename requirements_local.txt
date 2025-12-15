@@ -1,0 +1,4 @@
+fabrictestbed-extensions
+pandas
+matplotlib
+pyjwt

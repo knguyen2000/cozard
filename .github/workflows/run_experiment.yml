@@ -30,12 +30,9 @@ jobs:
 
       - name: Install FABRIC Client
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libopencv-dev python3-opencv gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
           python -m pip install --upgrade pip
           pip install wheel
-          pip install fabrictestbed-extensions pandas pyjwt matplotlib
-          pip install -r requirements.txt
+          pip install -r requirements_local.txt
 
       - name: Configure FABRIC Credentials
         env:
