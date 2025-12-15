@@ -107,8 +107,9 @@ def configure_routed_network(slice):
 def check_and_install_gpu_drivers(slice, node):
     logger.info(f"Checking GPU drivers on {node.get_name()}...")
     # Check if nvidia-smi works
+    # Check if nvidia-smi works and returns valid status
     stdout, stderr = node.execute("nvidia-smi", quiet=True)
-    if stdout and "NVIDIA-SMI" in stdout:
+    if stdout and ("Driver Version:" in stdout or "Tesla T4" in stdout):
         logger.info(f"GPU Drivers already operational on {node.get_name()}.")
         return
 
@@ -131,14 +132,14 @@ def check_and_install_gpu_drivers(slice, node):
     
     # Verify
     stdout, stderr = node.execute("nvidia-smi", quiet=True)
-    if stdout and "NVIDIA-SMI" in stdout:
+    if stdout and ("Driver Version:" in stdout or "Tesla T4" in stdout):
         logger.info(f"SUCCESS: GPU Drivers installed on {node.get_name()}.")
     else:
         logger.warning(f"nvidia-smi failed on {node.get_name()}. Trying 'sudo modprobe nvidia'...")
         node.execute("sudo modprobe nvidia", quiet=True)
         time.sleep(2)
         stdout, stderr = node.execute("nvidia-smi", quiet=True)
-        if stdout and "NVIDIA-SMI" in stdout:
+        if stdout and ("Driver Version:" in stdout or "Tesla T4" in stdout):
              logger.info(f"SUCCESS: GPU Drivers loaded manually on {node.get_name()}.")
         else:
              logger.error(f"FAIL: GPU Drivers still not working on {node.get_name()} after install/reboot.")

@@ -24,7 +24,8 @@ class MetricsRecorder:
         self.stalls = 0
         self.total_stall_duration = 0.0
         self.fps_history = []
-        self.loss_history = [] # Use this for BBRv3 correlation
+        self.loss_history = []
+        self.started = False # Lazy start flag
         
         # CSV init
         abs_path = os.path.abspath(self.filename)
@@ -35,6 +36,11 @@ class MetricsRecorder:
 
     def update(self):
         now = time.time()
+        
+        if not self.started:
+            self.started = True
+            logger.info("First frame received. Starting metrics recording.")
+            
         if self.last_frame_time is None:
             self.last_frame_time = now
             return
@@ -52,6 +58,10 @@ class MetricsRecorder:
     async def log_periodically(self, pc):
         while True:
             await asyncio.sleep(1.0) # Log every second
+            
+            if not self.started:
+                continue
+
             now = time.time()
             fps = self.frames_received
             
