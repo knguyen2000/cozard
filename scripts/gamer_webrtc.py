@@ -66,6 +66,7 @@ class GStreamerVideoTrack(VideoStreamTrack):
         
         self.running = True
         self.current_frame = None
+        self.frame_available = asyncio.Event()
         self.pump_thread = threading.Thread(target=self.pump_loop, daemon=True)
         
         ret = self.pipeline.set_state(Gst.State.PLAYING)
