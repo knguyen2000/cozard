@@ -30,7 +30,7 @@ class MetricsRecorder:
         abs_path = os.path.abspath(self.filename)
         logger.info(f"Initializing MetricsRecorder. Writing to: {abs_path}")
         with open(self.filename, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['timestamp', 'fps', 'stall_duration_ms'])
+            writer = csv.DictWriter(f, fieldnames=['timestamp', 'fps', 'stall_duration_ms', 'bitrate_mbps'])
             writer.writeheader()
 
     def update(self):
@@ -79,7 +79,8 @@ class MetricsRecorder:
                 writer.writerow({
                     'timestamp': now - self.start_time,
                     'fps': fps,
-                    'stall_duration_ms': self.total_stall_duration * 1000
+                    'stall_duration_ms': self.total_stall_duration * 1000,
+                    'bitrate_mbps': bitrate
                 })
             
             logger.info(f"Stats: FPS={fps}, Stalls={self.stalls}, Total Stall Time={self.total_stall_duration*1000:.1f}ms")

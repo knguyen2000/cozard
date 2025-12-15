@@ -75,6 +75,52 @@ def plot_rtt_cdf():
     plt.savefig("chart_rtt_cdf.png")
     print("Saved chart_rtt_cdf.png")
 
+def plot_rtt_series():
+    plt.figure(figsize=(10, 5))
+    
+    files = glob.glob("ping_*.log")
+    for f in files:
+        phase = f.replace("ping_", "").replace(".log", "")
+        df = parse_ping_log(f)
+        if df.empty: continue
+        
+        plt.plot(df['time'], df['rtt'], label=phase, alpha=0.7)
+        
+    plt.title("RTT (Latency) over Time")
+    plt.xlabel("Time (s)")
+    plt.ylabel("RTT (ms)")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("chart_rtt_series.png")
+    print("Saved chart_rtt_series.png")
+
+def plot_bitrate_series():
+    plt.figure(figsize=(10, 5))
+    
+    files = glob.glob("metrics_*.csv")
+    has_data = False
+    for f in files:
+        phase = f.replace("metrics_", "").replace(".csv", "")
+        try:
+            df = pd.read_csv(f)
+            if 'bitrate_mbps' in df.columns:
+                plt.plot(df['timestamp'], df['bitrate_mbps'], label=phase, linewidth=2)
+                has_data = True
+        except Exception as e:
+            print(f"Skipping {f}: {e}")
+            
+    if has_data:
+        plt.axhline(y=40, color='r', linestyle='--', label='Link Capacity (40Mbps)')
+        plt.title("Game Throughput over Time")
+        plt.xlabel("Time (s)")
+        plt.ylabel("Throughput (Mbps)")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig("chart_bitrate_series.png")
+        print("Saved chart_bitrate_series.png")
+    else:
+        print("No bitrate data found in metrics CSVs (Requires new monitor_webrtc.py)")
+
 def plot_harm_factor():
     if not os.path.exists("gaming_metrics.csv"):
         print("No summary metrics found.")
@@ -187,6 +233,8 @@ if __name__ == "__main__":
     try:
         plot_fps_series()
         plot_rtt_cdf()
+        plot_rtt_series()
+        plot_bitrate_series()
         plot_harm_factor()
         plot_summary_metrics()
         print("Done.")
