@@ -268,6 +268,10 @@ def run_experiment(slice):
                 # Extend attack to 60s to ensure full overlap with 40s game stream (avoiding 'happy ending' bias)
                 attacker.execute_thread("iperf3 -c 192.168.20.2 -p 5202 -C bbr -P 5 -t 60 --logfile attack.log")
                 time.sleep(5)
+            else:
+                 # Align baseline timing with attack phases (which have 5s warmup)
+                 logger.info("Waiting 5s to align with attack phases...")
+                 time.sleep(5)
             
             # Start Gamer (Sender)
             logger.info("Starting WebRTC Stream (Gamer)...")
@@ -288,34 +292,31 @@ def run_experiment(slice):
             if phase['attack']:
                  attacker.execute("pkill -f iperf3", quiet=True)
 
-            # Debug: Log TC stats after run to see if packets were dropped/queued
+            # Log TC stats after run to see if packets were dropped/queued
             if r_ifaces:
                 logger.info("TC Stats AFTER run:")
                 router.execute(f"tc -s qdisc show dev {iface}")
 
             time.sleep(2)
 
-            # --- PROCESS METRICS ---
             logger.info("Processing metrics...")
             
-            # 1. Total Throughput (Receiver Interface)
+            # Total Throughput (Receiver Interface)
             total_bytes = end_bytes - start_bytes
             total_mbps = (total_bytes * 8) / (40 * 1_000_000) # Mbps over 40s
             
-            # --- DOWNLOAD DATA FOR ARTIFACTS (Do this FIRST) ---
             try:
-                # 1. Ping Logs (from Gamer)
+                # Ping Logs (from Gamer)
                 logger.info(f"Downloading ping log: ping_{phase['name']}.log")
                 gamer.download_file(f"ping_{phase['name']}.log", f"ping_{phase['name']}.log")
                 
-                # 2. Debug Logs
                 logger.info(f"Downloading debug logs...")
                 receiver.download_file(f"monitor_{phase['name']}.log", "monitor.log") 
                 gamer.download_file(f"gamer_{phase['name']}.log", "gamer.log")
             except Exception as e:
                 logger.warning(f"Failed to download logs for phase {phase['name']}: {e}")
 
-            # 2. Attack Throughput (iperf3)
+            # Attack Throughput (iperf3)
             if phase['attack']:
                 try:
                     attacker.download_file("attack.log", "attack.log")
@@ -327,7 +328,7 @@ def run_experiment(slice):
                         has_sum = any("[SUM]" in line for line in lines)
                         
                         for line in lines:
-                            # 1. Determine if we should parse this line
+                            # Determine if we should parse this line
                             parse_line = False
                             if has_sum and "[SUM]" in line:
                                 parse_line = True
@@ -340,7 +341,7 @@ def run_experiment(slice):
                                 parts = line.split()
                                 try:
                                     # Find the number before the unit
-                                    # Example: "  2.29 Gbits/sec" or "   981 Mbits/sec"
+                                    # "2.29 Gbits/sec" or "981 Mbits/sec"
                                     for i, part in enumerate(parts):
                                         if "bits/sec" in part: # Mbits/sec, Gbits/sec, Kbits/sec
                                             # Value is at i-1
@@ -358,7 +359,7 @@ def run_experiment(slice):
                                 except: 
                                     pass
                         
-                        logger.info(f"Parsed rates: {rates}") # Debug print
+                        logger.info(f"Parsed rates: {rates}")
                         if rates:
                             attack_throughput = sum(rates) / len(rates)
                         else:
@@ -369,14 +370,11 @@ def run_experiment(slice):
                     logger.warning(f"Could not read attack throughput: {e}")
                     attack_throughput = float('nan')
 
-
-
-
-            # 3. Game Throughput (Derived)
+            # Game Throughput (Derived)
             # Game = Total - Attack (Clamped at 0)
             game_mbps = max(0, total_mbps - attack_throughput)
             
-            # 4. Game Quality (FPS/Stalls)
+            # Game Quality (FPS/Stalls)
             r_avg_fps = 0
             r_stall_time = 0
             try:
@@ -393,11 +391,10 @@ def run_experiment(slice):
             except Exception as e:
                 logger.error(f"Failed to read Game Metrics for {phase['name']}: {e}")
 
-            # 5. Jain's Fairness Index
+            # Jain's Fairness Index
             j_index = float("nan")
 
             if phase['attack']:
-                # Use the values you actually stored
                 game = game_mbps
                 attack = attack_throughput
 
@@ -439,8 +436,8 @@ def run_experiment(slice):
              n.execute("pkill -f python3", quiet=True)
              n.execute("pkill -f iperf3", quiet=True)
 
-    # Save Final Report
-    logger.info("Saving 'gaming_metrics.csv' (Summary)...")
+    # Final Report
+    logger.info("Saving 'gaming_metrics.csv'...")
     with open("gaming_metrics.csv", 'w', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=['phase', 'avg_fps', 'total_stall_ms', 'game_mbps', 'attack_mbps', 'j_index'])
         writer.writeheader()
@@ -454,9 +451,9 @@ def run_experiment(slice):
         # Kill Switch Logic
         fps_drop = (baseline['avg_fps'] - wired['avg_fps']) / baseline['avg_fps'] if baseline['avg_fps'] > 0 else 0
         if fps_drop > 0.3 or wired['total_stall_ms'] > 1000:
-             logger.info("\n[SUCCESS] KILL SWITCH ACTIVATED (Wired)! 💥")
+             logger.info("\nACTIVATED!")
         else:
-             logger.info("\n[FAIL] Stream Survived Wired Attack.")
+             logger.info("\nFAIL: Stream Survived Attack")
 
         # Scientific Metrics
         harm_factor = 0
@@ -465,7 +462,7 @@ def run_experiment(slice):
         elif wired['total_stall_ms'] > 0:
             harm_factor = 999.0
             
-        logger.info(f"\n[SCIENTIFIC RESULT]")
+        logger.info(f"\n[RESULT]")
         logger.info(f"Harm Factor (Wired): {harm_factor:.1f}x slower")
         logger.info(f"Fairness Index: {wired['j_index']:.2f} (0=Unfair, 1=Fair)")
 

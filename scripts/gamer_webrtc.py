@@ -27,20 +27,11 @@ class GStreamerVideoTrack(VideoStreamTrack):
         super().__init__()
         
         if not os.path.exists(filename):
-            logger.error(f"FATAL: Video file {filename} NOT FOUND! Falling back to videotestsrc.")
+            logger.error(f"FATAL: Video file {filename} NOT FOUND! Falling back to videotestsrc")
             self.source_str = "videotestsrc pattern=ball"
         else:
             abs_path = os.path.abspath(filename).replace("\\", "/")
-            
-            # --- GPU PIPELINE CONSTRUCTION ---
-            # Try to construct a GPU pipeline. 
-            # We assume NVIDIA T4 + nvh264dec.
-            
-            # Pipeline Logic:
             # filesrc -> qtdemux -> h264parse -> nvh264dec -> videoconvert -> videoscale -> videorate -> format -> appsink
-            
-            # Why nvh264dec? Standard element in gst-plugins-bad for NVDEC.
-            # Why h264parse? Decoders often need parsed streams (AU aligned).
             
             self.gpu_pipeline_str = (
                 f"filesrc location={abs_path} ! qtdemux ! h264parse ! nvh264dec ! "
@@ -146,6 +137,7 @@ class GStreamerVideoTrack(VideoStreamTrack):
             buffer.unmap(map_info)
 
     async def recv(self):
+        await asyncio.sleep(1/60)
         # 60FPS Pacing
         pts_step = 1500
         if not hasattr(self, "_pts"): self._pts = 0

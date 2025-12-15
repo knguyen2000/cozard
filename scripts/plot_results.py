@@ -116,7 +116,6 @@ def plot_harm_factor():
     print("Saved chart_harm_factor.png")
 
 def plot_summary_metrics():
-    """Generates the Summary Bar Charts (FPS/Stalls and Throughput/Fairness)"""
     if not os.path.exists("gaming_metrics.csv"):
         print("No gaming_metrics.csv found.")
         return
@@ -138,7 +137,7 @@ def plot_summary_metrics():
         ax1.tick_params(axis='y', labelcolor='blue')
         
         # Stall Duration Line (Secondary Y-axis)
-        stalls = df['total_stall_ms'] / 1000.0 # Convert milliseconds to seconds
+        stalls = df['total_stall_ms'] / 1000.0 # Convert ms to seconds
         ax1b = ax1.twinx()
         ax1b.plot(x, stalls, color='red', marker='o', linewidth=3, markersize=8, label='Total Stall Time (s)')
         ax1b.set_ylabel('Total Stall Time (s)', color='red')
@@ -149,7 +148,7 @@ def plot_summary_metrics():
         ax1.set_xticklabels(phases, rotation=15)
         ax1.grid(True, alpha=0.3, axis='y')
 
-        # Plot 2: Throughput & Fairness
+        # Plot Throughput & Fairness
         if 'attack_mbps' in df.columns and 'j_index' in df.columns:
             attack_rate = df['attack_mbps']
             j_index = df['j_index']

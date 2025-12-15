@@ -71,10 +71,8 @@ class MetricsRecorder:
             
             self.last_bytes_received = current_bytes
             self.frames_received = 0 
-            self.bytes_received = 0 # No longer used for bitrate
-            
-            # Log to CSV
-            
+            self.bytes_received = 0
+                        
             # Log to CSV
             with open(self.filename, 'a', newline='') as f:
                 writer = csv.DictWriter(f, fieldnames=['timestamp', 'fps', 'stall_duration_ms'])
