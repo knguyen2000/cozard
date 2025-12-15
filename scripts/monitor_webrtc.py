@@ -20,7 +20,7 @@ class MetricsRecorder:
         self.frames_received = 0
         self.bytes_received = 0
         self.last_bytes_received = 0
-        self.last_frame_time = time.time()
+        self.last_frame_time = None
         self.stalls = 0
         self.total_stall_duration = 0.0
         self.fps_history = []
@@ -36,8 +36,10 @@ class MetricsRecorder:
     def update(self):
         pass
 
-    def on_frame(self):
-        now = time.time()
+        if self.last_frame_time is None:
+            self.last_frame_time = now
+            return
+
         inter_frame_time = now - self.last_frame_time
         self.frames_received += 1
         
@@ -59,9 +61,19 @@ class MetricsRecorder:
             stats = await pc.getStats()
             for key, report in stats.items():
                 if report.type == 'inbound-rtp' and report.kind == 'video':
-                    # Safe access to bytesReceived
+                    # Debug: Log what available
+                    # logger.info(f"Stats Report: {report}") 
                     current_bytes = getattr(report, 'bytesReceived', 0)
-                    break
+                    if current_bytes > 0:
+                        break
+            
+            # If still 0, try to find transport stats or candidate-pair?
+            # For now just debug if we found nothing
+            if current_bytes == 0 and fps > 0:
+                 logger.warning("FPS > 0 but bytesReceived is 0. Stats contents:")
+                 for key, report in stats.items():
+                     if report.type == 'inbound-rtp':
+                         logger.warning(f"Report {key}: {report}")
             
             # Calculate Mbps
             if self.last_bytes_received > 0:
