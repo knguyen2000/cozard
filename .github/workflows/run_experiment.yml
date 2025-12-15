@@ -20,11 +20,20 @@ jobs:
         with:
           python-version: "3.10"
 
+      - name: Cache Pip Packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install FABRIC Client
         run: |
           sudo apt-get update
           sudo apt-get install -y libopencv-dev python3-opencv gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
           python -m pip install --upgrade pip
+          pip install wheel
           pip install fabrictestbed-extensions pandas pyjwt matplotlib
           pip install -r requirements.txt
 

@@ -68,13 +68,33 @@ class MetricsRecorder:
             # Get Bitrate from WebRTC Stats
             current_bytes = 0
             stats = await pc.getStats()
+            
+            # Strategy 1: Try inbound-rtp (Standard)
             for key, report in stats.items():
                 if report.type == 'inbound-rtp' and report.kind == 'video':
-                    # Debug: Log what available
-                    # logger.info(f"Stats Report: {report}") 
-                    current_bytes = getattr(report, 'bytesReceived', 0)
-                    if current_bytes > 0:
+                    b = getattr(report, 'bytesReceived', 0)
+                    if b > 0:
+                        current_bytes = b
                         break
+
+            # Strategy 2: If 0, try transport stats (Aggregate for connection)
+            if current_bytes == 0:
+                for key, report in stats.items():
+                     if report.type == 'transport':
+                        b = getattr(report, 'bytesReceived', 0)
+                        if b > 0:
+                            current_bytes = b
+                            break
+            
+            # Strategy 3: Estimate from packets (Last Resort)
+            if current_bytes == 0 and fps > 0:
+                 for key, report in stats.items():
+                    if report.type == 'inbound-rtp' and report.kind == 'video':
+                        packets = getattr(report, 'packetsReceived', 0)
+                        if packets > 0:
+                            # Assume MTU ~1200 bytes per packet
+                            current_bytes = packets * 1200
+                            break
             
             # If still 0, try to find transport stats or candidate-pair?
             # For now just debug if we found nothing

@@ -53,6 +53,8 @@ def configure_routed_network(slice):
                     node.execute(f"sudo ip addr flush dev {ifaces[0]}")
                     node.execute(f"sudo ip addr add 192.168.{ip}/24 dev {ifaces[0]}")
                     node.execute(f"sudo ip link set dev {ifaces[0]} up")
+                    # Enable IP Forwarding on the router
+                    node.execute("sudo sysctl -w net.ipv4.ip_forward=1")
                     node.execute(f"sudo ip route add 192.168.20.0/24 via 192.168.10.1")
                     # Flush IPTABLES to allow ICE/UDP
                     node.execute("sudo iptables -F") 
@@ -156,8 +158,17 @@ def check_and_install_gpu_drivers(slice, node):
     
     # Verify GStreamer NVENC (Force Registry Rebuild)
     logger.info(f"Rebuilding GStreamer Registry on {node.get_name()}...")
+    
+    # Ensure plugins-bad/ugly/libav is installed
+    node.execute("sudo apt-get install -y gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav", quiet=True)
+    
     node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
     node.execute("gst-inspect-1.0 > /dev/null 2>&1", quiet=True) 
+    
+    # check for blacklisted plugins
+    stdout, _ = node.execute("gst-inspect-1.0 -b", quiet=True)
+    if stdout and "nvh264dec" in stdout:
+        logger.warning(f"WARNING: nvh264dec is BLACKLISTED on {node.get_name()}!")
     
     stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
     if "Factory Details" in stdout:
