@@ -104,6 +104,38 @@ def configure_routed_network(slice):
     if nstat[0]:
         logger.info(f"ICMP Redirect Stats:\n{nstat[0].strip()}")
 
+def check_and_install_gpu_drivers(slice, node):
+    logger.info(f"Checking GPU drivers on {node.get_name()}...")
+    # Check if nvidia-smi works
+    stdout, stderr = node.execute("nvidia-smi", quiet=True)
+    if stdout and "NVIDIA-SMI" in stdout:
+        logger.info(f"GPU Drivers already operational on {node.get_name()}.")
+        return
+
+    logger.info(f"GPU Drivers missing on {node.get_name()}. Installing (this takes ~5-10 mins)...")
+    
+    # Update and Install
+    node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get update", quiet=True)
+    # Install drivers and utils
+    node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-535 nvidia-utils-535", quiet=True)
+    
+    # Reboot
+    logger.info(f"Rebooting {node.get_name()} to load drivers...")
+    try:
+        node.execute("sudo reboot", quiet=True)
+    except: pass
+    
+    time.sleep(20)
+    logger.info(f"Waiting for {node.get_name()} to reconnect...")
+    slice.wait_ssh(timeout=600) # Give it plenty of time
+    
+    # Verify
+    stdout, stderr = node.execute("nvidia-smi", quiet=True)
+    if stdout and "NVIDIA-SMI" in stdout:
+        logger.info(f"SUCCESS: GPU Drivers installed on {node.get_name()}.")
+    else:
+        logger.error(f"FAIL: GPU Drivers still not working on {node.get_name()} after install/reboot.")
+
 def setup_nodes(slice):
     """Uploads scripts and installs dependencies on Gamer and Receiver"""
     logger.info("\n[SETUP] Setting up Game Nodes (This may take a while)...")
@@ -130,10 +162,10 @@ def setup_nodes(slice):
                 logger.warning(f"Could not upload {remote_name} (check path): {e}")
         
         # System Deps
-        # Install NVIDIA Drivers (Headless) and GStreamer plugins
-        node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get update", quiet=True)
-        # Check if driver installed, if not install it (this takes time)
-        node.execute("if ! nvidia-smi; then sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-535; fi", quiet=True)
+        # Install NVIDIA Drivers (Reboot if needed)
+        check_and_install_gpu_drivers(slice, node)
+        
+        node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip libopencv-dev python3-opencv iperf3 libgstreamer1.0-dev gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav python3-gi", quiet=True)
         
         node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y python3-pip libopencv-dev python3-opencv iperf3 libgstreamer1.0-dev gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav python3-gi", quiet=True)
         # Download Video Clip

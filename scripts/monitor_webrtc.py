@@ -75,7 +75,7 @@ class MetricsRecorder:
                         
             # Log to CSV
             with open(self.filename, 'a', newline='') as f:
-                writer = csv.DictWriter(f, fieldnames=['timestamp', 'fps', 'stall_duration_ms'])
+                writer = csv.DictWriter(f, fieldnames=['timestamp', 'fps', 'stall_duration_ms', 'bitrate_mbps'])
                 writer.writerow({
                     'timestamp': now - self.start_time,
                     'fps': fps,
