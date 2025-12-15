@@ -139,25 +139,17 @@ class GStreamerVideoTrack(VideoStreamTrack):
             buffer.unmap(map_info)
 
     async def recv(self):
-        # await asyncio.sleep(1/60)
-        # 60FPS Pacing
+        # Wait for GStreamer to produce a frame (sync to 60fps)
+        await self.frame_available.wait()
+        self.frame_available.clear()
+
+        # 60FPS Pacing (1/60 * 90000 = 1500)
         pts_step = 1500
         if not hasattr(self, "_pts"): self._pts = 0
         else: self._pts += pts_step
         pts = self._pts
         
-        # Wait logic
-        if self.current_frame is None:
-            retries = 0
-            while self.current_frame is None and retries < 100:
-                await asyncio.sleep(0.05)
-                retries += 1
-            
-        if self.current_frame is None:
-             logger.warning("No frame available! Sending BLACK frame.")
-             frame = VideoFrame(width=1280, height=720, format="rgb24")
-        else:
-             frame = self.current_frame
+        frame = self.current_frame
         
         frame.pts = int(pts)
         frame.time_base = fractions.Fraction(1, 90000)
