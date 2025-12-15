@@ -133,6 +133,11 @@ class GStreamerVideoTrack(VideoStreamTrack):
             frame = VideoFrame.from_ndarray(array, format="rgb24")
             self.current_frame = frame
             self._loop.call_soon_threadsafe(self.frame_available.set)
+            
+            if not hasattr(self, "_fc"): self._fc = 0
+            self._fc += 1
+            if self._fc % 60 == 0: logger.info(f"DEBUG: Produced frame {self._fc}")
+
         except Exception as e:
             logger.error(f"Frame creation error: {e}")
         finally:
@@ -142,6 +147,10 @@ class GStreamerVideoTrack(VideoStreamTrack):
         # Wait for GStreamer to produce a frame (sync to 60fps)
         await self.frame_available.wait()
         self.frame_available.clear()
+        
+        if not hasattr(self, "_rc"): self._rc = 0
+        self._rc += 1
+        if self._rc % 60 == 0: logger.info(f"DEBUG: Recv frame {self._rc}")
 
         # 60FPS Pacing (1/60 * 90000 = 1500)
         pts_step = 1500
