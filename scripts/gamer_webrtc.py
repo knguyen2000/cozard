@@ -137,7 +137,7 @@ class GStreamerVideoTrack(VideoStreamTrack):
             buffer.unmap(map_info)
 
     async def recv(self):
-        await asyncio.sleep(1/60)
+        # await asyncio.sleep(1/60)
         # 60FPS Pacing
         pts_step = 1500
         if not hasattr(self, "_pts"): self._pts = 0
