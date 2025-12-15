@@ -159,25 +159,30 @@ def check_and_install_gpu_drivers(slice, node):
     # Verify GStreamer NVENC (Force Registry Rebuild)
     logger.info(f"Rebuilding GStreamer Registry on {node.get_name()}...")
     
-    # Ensure plugins-bad/ugly/libav is installed
-    node.execute("sudo apt-get install -y gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav", quiet=True)
-    
+    # 1. Clear cache
     node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
+    
+    # 2. Trigger re-scan
     node.execute("gst-inspect-1.0 > /dev/null 2>&1", quiet=True) 
     
-    # check for blacklisted plugins
-    stdout, _ = node.execute("gst-inspect-1.0 -b", quiet=True)
-    if stdout and "nvh264dec" in stdout:
-        logger.warning(f"WARNING: nvh264dec is BLACKLISTED on {node.get_name()}!")
-    
+    # 3. Check for specific plugin availability
     stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
     if "Factory Details" in stdout:
         logger.info(f"SUCCESS: GStreamer found nvh264dec on {node.get_name()}.")
     else:
-        logger.warning(f"FAIL: GStreamer cannot find nvh264dec on {node.get_name()}. GPU accel will fail.")
-        # Try clearing registry
+        logger.warning(f"FAIL: GStreamer cannot find nvh264dec on {node.get_name()}. checking blacklist...")
+        
+        # Check blacklist
+        stdout, _ = node.execute("gst-inspect-1.0 -b", quiet=True)
+        if "nvh264dec" in stdout or "nvcodec" in stdout:
+             logger.warning("Plugin IS BLACKLISTED! Possible driver/library mismatch.")
+             # Attempt to export drivers path?
+        
+        # Last ditch: Install bad plugins again
+        logger.info("Re-installing gstreamer-plugins-bad...")
+        node.execute("sudo apt-get install --reinstall -y gstreamer1.0-plugins-bad", quiet=True)
         node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
-        node.execute("gst-inspect-1.0 > /dev/null 2>&1", quiet=True)
+        node.execute("gst-inspect-1.0 > /dev/null", quiet=True)
 
 def setup_nodes(slice):
     """Uploads scripts and installs dependencies on Gamer and Receiver"""
@@ -463,6 +468,12 @@ def run_experiment(slice):
                     if rows:
                         r_avg_fps = sum(float(r['fps']) for r in rows) / len(rows)
                         r_stall_time = sum(float(r['stall_duration_ms']) for r in rows)
+                        # Use Application-Layer Bitrate
+                        if 'bitrate_mbps' in rows[0]:
+                             game_mbps = sum(float(r['bitrate_mbps']) for r in rows) / len(rows)
+                        else:
+                             # Fallback if column missing
+                             logger.warning("bitrate_mbps column missing in metrics CSV!")
             except Exception as e:
                 logger.error(f"Failed to read Game Metrics for {phase['name']}: {e}")
 
@@ -494,7 +505,7 @@ def run_experiment(slice):
                     else:
                         j_index = (total_t ** 2) / (2 * sum_sq)
             
-            logger.info(f"Phase Result: FPS={r_avg_fps:.1f}, Stalls={r_stall_time:.0f}ms, Total={total_mbps:.1f}Mbps, Game={game_mbps:.2f}Mbps, Attack={attack_throughput:.2f}Mbps, Jain={j_index:.2f}")
+            logger.info(f"Phase Result: FPS={r_avg_fps:.1f}, Stalls={r_stall_time:.0f}ms, Total_Interface={total_mbps:.1f}Mbps, Game_App={game_mbps:.2f}Mbps, Attack={attack_throughput:.2f}Mbps, Jain={j_index:.2f}")
 
             final_results.append({
                 'phase': phase['name'],

@@ -159,6 +159,7 @@ def plot_harm_factor():
                 f'{height:.1f}x',
                 ha='center', va='bottom')
                 
+    plt.savefig("chart_harm_factor.png")
     print("Saved chart_harm_factor.png")
 
 def plot_summary_metrics():

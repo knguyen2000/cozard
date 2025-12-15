@@ -59,10 +59,21 @@ class MetricsRecorder:
         while True:
             await asyncio.sleep(1.0) # Log every second
             
-            if not self.started:
+            if not self.started or self.last_frame_time is None:
                 continue
 
             now = time.time()
+            
+            # Check for active stall (frozen stream)
+            # If we haven't received a frame in > 200ms, count it as stall time NOW
+            time_since_last = now - self.last_frame_time
+            if time_since_last > 0.2:
+                self.stalls += 1
+                self.total_stall_duration += time_since_last
+                # Forward the last_frame_time so we don't double count this duration
+                # when/if the next frame finally arrives.
+                self.last_frame_time = now
+
             fps = self.frames_received
             
             # Get Bitrate from WebRTC Stats
@@ -109,6 +120,9 @@ class MetricsRecorder:
                 bitrate = ((current_bytes - self.last_bytes_received) * 8) / 1_000_000
             else:
                 bitrate = 0.0
+            
+            # Handle counter wrap-around or reset
+            if bitrate < 0: bitrate = 0.0
             
             self.last_bytes_received = current_bytes
             self.frames_received = 0 
