@@ -134,7 +134,28 @@ def check_and_install_gpu_drivers(slice, node):
     if stdout and "NVIDIA-SMI" in stdout:
         logger.info(f"SUCCESS: GPU Drivers installed on {node.get_name()}.")
     else:
-        logger.error(f"FAIL: GPU Drivers still not working on {node.get_name()} after install/reboot.")
+        logger.warning(f"nvidia-smi failed on {node.get_name()}. Trying 'sudo modprobe nvidia'...")
+        node.execute("sudo modprobe nvidia", quiet=True)
+        time.sleep(2)
+        stdout, stderr = node.execute("nvidia-smi", quiet=True)
+        if stdout and "NVIDIA-SMI" in stdout:
+             logger.info(f"SUCCESS: GPU Drivers loaded manually on {node.get_name()}.")
+        else:
+             logger.error(f"FAIL: GPU Drivers still not working on {node.get_name()} after install/reboot.")
+
+    # Verify GStreamer NVENC
+    logger.info(f"Verifying GStreamer NVENC/NVDEC on {node.get_name()}...")
+    # Update registry
+    node.execute("gst-inspect-1.0 > /dev/null 2>&1", quiet=True) 
+    
+    stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
+    if "Factory Details" in stdout:
+        logger.info(f"SUCCESS: GStreamer found nvh264dec on {node.get_name()}.")
+    else:
+        logger.warning(f"FAIL: GStreamer cannot find nvh264dec on {node.get_name()}. GPU accel will fail.")
+        # Try clearing registry
+        node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
+        node.execute("gst-inspect-1.0 > /dev/null 2>&1", quiet=True)
 
 def setup_nodes(slice):
     """Uploads scripts and installs dependencies on Gamer and Receiver"""

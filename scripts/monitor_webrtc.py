@@ -34,8 +34,7 @@ class MetricsRecorder:
             writer.writeheader()
 
     def update(self):
-        pass
-
+        now = time.time()
         if self.last_frame_time is None:
             self.last_frame_time = now
             return
@@ -133,16 +132,22 @@ def run_server(ip, port, metrics):
 
     @pc.on("track")
     def on_track(track):
-        logger.info(f"Track received: {track.kind}")
+        logger.info(f"Track received: {track.kind} (ID: {track.id})")
         if track.kind == "video":
             async def consume():
+                frame_count = 0
+                logger.info("Starting video track consumer loop...")
                 while True:
                     try:
                         frame = await track.recv()
-                        metrics.on_frame()
+                        frame_count += 1
+                        if frame_count % 60 == 0:
+                            logger.info(f"DEBUG: Frame received {frame_count} (pts={frame.pts})")
+                        metrics.update()
                     except Exception as e:
-                        logger.warning(f"Track ended: {e}")
+                        logger.warning(f"Track ended or Error in consume: {e}")
                         break
+                logger.info("Video track consumer loop ended.")
             asyncio.ensure_future(consume())
 
     # Start Metrics Logger
