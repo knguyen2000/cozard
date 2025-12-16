@@ -110,7 +110,7 @@ def plot_bitrate_series():
             print(f"Skipping {f}: {e}")
             
     if has_data:
-        plt.axhline(y=40, color='r', linestyle='--', label='Link Capacity (40Mbps)')
+        # plt.axhline(y=40, color='r', linestyle='--', label='Link Capacity (40Mbps)') # Omitted to zoom in
         plt.title("Game Throughput over Time")
         plt.xlabel("Time (s)")
         plt.ylabel("Throughput (Mbps)")

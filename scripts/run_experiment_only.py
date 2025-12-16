@@ -159,7 +159,7 @@ def check_and_install_gpu_drivers(slice, node):
     # Verify GStreamer NVENC (Force Registry Rebuild)
     logger.info(f"Rebuilding GStreamer Registry on {node.get_name()}...")
 
-    # 1. Clean Slate
+    # Clean Slate
     node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
     
     # Ensure libnvidia-encode.so symlink exists
@@ -178,7 +178,7 @@ def check_and_install_gpu_drivers(slice, node):
         logger.warning("WARNING: No libnvidia-encode found! Reinstalling...")
         node.execute("sudo apt-get install --reinstall -y libnvidia-encode-535", quiet=True)
 
-    # 3. Check for specific plugin availability
+    # Check for specific plugin availability
     stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
     if "Factory Details" in stdout:
         logger.info(f"SUCCESS: GStreamer found nvh264dec on {node.get_name()}.")
