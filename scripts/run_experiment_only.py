@@ -158,31 +158,50 @@ def check_and_install_gpu_drivers(slice, node):
     
     # Verify GStreamer NVENC (Force Registry Rebuild)
     logger.info(f"Rebuilding GStreamer Registry on {node.get_name()}...")
-    
-    # 1. Clear cache
+
+    # 1. Clean Slate
     node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
     
-    # 2. Trigger re-scan
-    node.execute("gst-inspect-1.0 > /dev/null 2>&1", quiet=True) 
-    
+    # Ensure libnvidia-encode.so symlink exists
+    # Often only libnvidia-encode.so.535.xx exists, but GStreamer looks for .so or .so.1
+    libs, _ = node.execute("ls /usr/lib/x86_64-linux-gnu/libnvidia-encode.so*", quiet=True)
+    if libs:
+        logger.info(f"Found NVIDIA Encoder libs:\n{libs}")
+        if "libnvidia-encode.so " not in libs and "libnvidia-encode.so\n" not in libs:
+             # Find the actual library
+             actual_lib = libs.split()[0]
+             logger.info(f"Fixing missing symlink for {actual_lib}...")
+             node.execute(f"sudo ln -sf {actual_lib} /usr/lib/x86_64-linux-gnu/libnvidia-encode.so", quiet=True)
+             node.execute(f"sudo ln -sf {actual_lib} /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1", quiet=True)
+             node.execute("sudo ldconfig", quiet=True)
+    else:
+        logger.warning("WARNING: No libnvidia-encode found! Reinstalling...")
+        node.execute("sudo apt-get install --reinstall -y libnvidia-encode-535", quiet=True)
+
     # 3. Check for specific plugin availability
     stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
     if "Factory Details" in stdout:
         logger.info(f"SUCCESS: GStreamer found nvh264dec on {node.get_name()}.")
     else:
-        logger.warning(f"FAIL: GStreamer cannot find nvh264dec on {node.get_name()}. checking blacklist...")
+        logger.warning(f"FAIL: GStreamer cannot find nvh264dec on {node.get_name()}. checking exclusion...")
         
         # Check blacklist
         stdout, _ = node.execute("gst-inspect-1.0 -b", quiet=True)
         if "nvh264dec" in stdout or "nvcodec" in stdout:
-             logger.warning("Plugin IS BLACKLISTED! Possible driver/library mismatch.")
-             # Attempt to export drivers path?
-        
-        # Last ditch: Install bad plugins again
+             logger.warning("Plugin IS BLACKLISTED! Reinstalling plugins-bad with fresh libs...")
+             
+        # Intense Repair: Reinstall plugins-bad NOW that libs are linked
         logger.info("Re-installing gstreamer-plugins-bad...")
         node.execute("sudo apt-get install --reinstall -y gstreamer1.0-plugins-bad", quiet=True)
         node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
         node.execute("gst-inspect-1.0 > /dev/null", quiet=True)
+        
+        # Final Check
+        stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
+        if "Factory Details" in stdout:
+             logger.info(f"SUCCESS: GStreamer repaired on {node.get_name()}.")
+        else:
+             logger.error(f"CRITIAL FAIL: Could not enable GPU acceleration on {node.get_name()}.")
 
 def setup_nodes(slice):
     """Uploads scripts and installs dependencies on Gamer and Receiver"""
