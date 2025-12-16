@@ -22,7 +22,7 @@ If you wish to run this experiment, you **must contact the repository owner** to
 
 The experiment is orchestrated via GitHub Actions in two stages:
 
-1.  **Step 1: Provision Infrastructure**
+1.  **Step 1: Provision Infrastructure (Only need to run once)**
 
     - Go to Actions -> Select **Provision FABRIC Infrastructure**.
     - Run this workflow manually to reserve the compute resources/slice.
