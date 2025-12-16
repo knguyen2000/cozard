@@ -395,7 +395,7 @@ def run_experiment(slice):
             
             # Start Gamer (Sender)
             logger.info("Starting WebRTC Stream (Gamer)...")
-            gamer.execute_thread(f"python3 gamer_webrtc.py --receiver-ip 192.168.20.2 --port 8888 > gamer.log 2>&1")
+            gamer.execute_thread(f"export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH; export GST_PLUGIN_SYSTEM_PATH=/usr/lib/x86_64-linux-gnu/gstreamer-1.0; python3 gamer_webrtc.py --receiver-ip 192.168.20.2 --port 8888 > gamer.log 2>&1")
             
             rec_iface = get_data_interfaces(receiver)[0]
             start_bytes = int(receiver.execute(f"cat /sys/class/net/{rec_iface}/statistics/rx_bytes", quiet=True)[0].strip())
