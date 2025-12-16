@@ -202,12 +202,27 @@ def check_and_install_gpu_drivers(slice, node):
         node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
         node.execute("gst-inspect-1.0 > /dev/null", quiet=True)
         
-        # Final Check
-        stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
-        if "Factory Details" in stdout:
-             logger.info(f"SUCCESS: GStreamer repaired on {node.get_name()}.")
-        else:
-             logger.error(f"CRITIAL FAIL: Could not enable GPU acceleration on {node.get_name()}.")
+    # Check & Diagnostics
+    stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
+    if "Factory Details" in stdout:
+        logger.info(f"SUCCESS: GStreamer repaired on {node.get_name()}.")
+    else:
+        logger.error(f"CRITIAL FAIL: Could not enable GPU acceleration on {node.get_name()}. Starting diagnostics...")
+        
+        # Diag 1: Is the plugin file there?
+        node.execute("ls -l /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so", quiet=False)
+        
+        # Diag 2: Why is it blacklisted?
+        logger.info("Checking GStreamer Blacklist details:")
+        node.execute("gst-inspect-1.0 -b", quiet=False)
+        
+        # Diag 3: Check dependencies of the plugin file
+        logger.info("Checking plugin dependencies (ldd):")
+        node.execute("ldd /usr/lib/x86_64-linux-gnu/gstreamer-1.0/libgstnvcodec.so", quiet=False)
+        
+        # Diag 4: Check LD Cache
+        logger.info("Checking ldconfig cache for nvidia:")
+        node.execute("ldconfig -p | grep nvidia", quiet=False)
 
 def setup_nodes(slice):
     """Uploads scripts and installs dependencies on Gamer and Receiver"""
