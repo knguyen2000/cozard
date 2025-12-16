@@ -130,7 +130,7 @@ def check_and_install_gpu_drivers(slice, node):
     # Update and Install
     node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get update", quiet=True)
     # Install drivers and utils
-    node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-535 nvidia-utils-535", quiet=True)
+    node.execute("sudo DEBIAN_FRONTEND=noninteractive apt-get install -y nvidia-driver-535 nvidia-utils-535 libnvidia-encode-535", quiet=True)
     
     # Reboot
     logger.info(f"Rebooting {node.get_name()} to load drivers...")
