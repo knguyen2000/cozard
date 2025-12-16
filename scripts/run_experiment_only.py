@@ -162,21 +162,27 @@ def check_and_install_gpu_drivers(slice, node):
     # Clean Slate
     node.execute("rm -rf ~/.cache/gstreamer-1.0", quiet=True)
     
-    # Ensure libnvidia-encode.so symlink exists
-    # Often only libnvidia-encode.so.535.xx exists, but GStreamer looks for .so or .so.1
-    libs, _ = node.execute("ls /usr/lib/x86_64-linux-gnu/libnvidia-encode.so*", quiet=True)
-    if libs:
-        logger.info(f"Found NVIDIA Encoder libs:\n{libs}")
-        if "libnvidia-encode.so " not in libs and "libnvidia-encode.so\n" not in libs:
-             # Find the actual library
-             actual_lib = libs.split()[0]
-             logger.info(f"Fixing missing symlink for {actual_lib}...")
-             node.execute(f"sudo ln -sf {actual_lib} /usr/lib/x86_64-linux-gnu/libnvidia-encode.so", quiet=True)
-             node.execute(f"sudo ln -sf {actual_lib} /usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1", quiet=True)
-             node.execute("sudo ldconfig", quiet=True)
-    else:
-        logger.warning("WARNING: No libnvidia-encode found! Reinstalling...")
-        node.execute("sudo apt-get install --reinstall -y libnvidia-encode-535", quiet=True)
+    libs_to_fix = [
+        "libnvidia-encode.so",
+        "libnvcuvid.so",
+        "libcuda.so"
+    ]
+
+    for lib_name in libs_to_fix:
+        libs, _ = node.execute(f"ls /usr/lib/x86_64-linux-gnu/{lib_name}*", quiet=True)
+        if libs:
+            logger.info(f"Found {lib_name} candidates:\n{libs}")
+            # Check if the exact .so symlink exists
+            if f"{lib_name} " not in libs and f"{lib_name}\n" not in libs:
+                 # Find the actual library (e.g., libnvidia-encode.so.535.161.07)
+                 actual_lib = libs.split()[0]
+                 logger.info(f"Fixing missing symlink for {actual_lib} -> {lib_name}...")
+                 node.execute(f"sudo ln -sf {actual_lib} /usr/lib/x86_64-linux-gnu/{lib_name}", quiet=True)
+                 node.execute(f"sudo ln -sf {actual_lib} /usr/lib/x86_64-linux-gnu/{lib_name}.1", quiet=True)
+        else:
+             logger.warning(f"WARNING: No {lib_name} found! This might cause GStreamer failure.")
+
+    node.execute("sudo ldconfig", quiet=True)
 
     # Check for specific plugin availability
     stdout, _ = node.execute("gst-inspect-1.0 nvh264dec", quiet=True)
